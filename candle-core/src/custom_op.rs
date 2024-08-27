@@ -1,3 +1,4 @@
+use crate::mtensor::MTensor;
 use crate::op::{BackpropOp, Op};
 use crate::tensor::from_storage;
 use crate::{CpuStorage, CudaStorage, Layout, MetalStorage, Result, Shape, Tensor};
@@ -153,21 +154,21 @@ pub trait CustomOp3 {
 
 impl Tensor {
     /// Applies a unary custom op without backward support
-    pub fn apply_op1_no_bwd<C: CustomOp1>(&self, c: &C) -> Result<Self> {
+    pub fn apply_op1_no_bwd<C: CustomOp1>(&self, c: &C) -> MTensor {
         let (storage, shape) = self.storage().apply_op1(self.layout(), c)?;
-        Ok(from_storage(storage, shape, BackpropOp::none(), false))
+        from_storage(storage, shape, BackpropOp::none(), false).into()
     }
 
     /// Applies a binary custom op without backward support
-    pub fn apply_op2_no_bwd<C: CustomOp2>(&self, rhs: &Self, c: &C) -> Result<Self> {
+    pub fn apply_op2_no_bwd<C: CustomOp2>(&self, rhs: &Self, c: &C) -> MTensor {
         let (storage, shape) =
             self.storage()
                 .apply_op2(self.layout(), &rhs.storage(), rhs.layout(), c)?;
-        Ok(from_storage(storage, shape, BackpropOp::none(), false))
+        from_storage(storage, shape, BackpropOp::none(), false).into()
     }
 
     /// Applies a ternary custom op without backward support
-    pub fn apply_op3_no_bwd<C: CustomOp3>(&self, t2: &Self, t3: &Self, c: &C) -> Result<Self> {
+    pub fn apply_op3_no_bwd<C: CustomOp3>(&self, t2: &Self, t3: &Self, c: &C) -> MTensor {
         let (storage, shape) = self.storage().apply_op3(
             self.layout(),
             &t2.storage(),
@@ -176,28 +177,24 @@ impl Tensor {
             t3.layout(),
             c,
         )?;
-        Ok(from_storage(storage, shape, BackpropOp::none(), false))
+        from_storage(storage, shape, BackpropOp::none(), false).into()
     }
 
     /// Applies a unary custom op.
-    pub fn apply_op1_arc(&self, c: Arc<Box<dyn CustomOp1 + Send + Sync>>) -> Result<Self> {
+    pub fn apply_op1_arc(&self, c: Arc<Box<dyn CustomOp1 + Send + Sync>>) -> MTensor {
         let (storage, shape) = self
             .storage()
             .apply_op1(self.layout(), c.as_ref().as_ref())?;
         let op = BackpropOp::new1(self, |s| Op::CustomOp1(s, c.clone()));
-        Ok(from_storage(storage, shape, op, false))
+        from_storage(storage, shape, op, false).into()
     }
 
-    pub fn apply_op1<C: 'static + CustomOp1 + Send + Sync>(&self, c: C) -> Result<Self> {
+    pub fn apply_op1<C: 'static + CustomOp1 + Send + Sync>(&self, c: C) -> MTensor {
         self.apply_op1_arc(Arc::new(Box::new(c)))
     }
 
     /// Applies a binary custom op.
-    pub fn apply_op2_arc(
-        &self,
-        rhs: &Self,
-        c: Arc<Box<dyn CustomOp2 + Send + Sync>>,
-    ) -> Result<Self> {
+    pub fn apply_op2_arc(&self, rhs: &Self, c: Arc<Box<dyn CustomOp2 + Send + Sync>>) -> MTensor {
         let (storage, shape) = self.storage().apply_op2(
             self.layout(),
             &rhs.storage(),
@@ -205,10 +202,10 @@ impl Tensor {
             c.as_ref().as_ref(),
         )?;
         let op = BackpropOp::new2(self, rhs, |t1, t2| Op::CustomOp2(t1, t2, c.clone()));
-        Ok(from_storage(storage, shape, op, false))
+        from_storage(storage, shape, op, false).into()
     }
 
-    pub fn apply_op2<C: 'static + CustomOp2 + Send + Sync>(&self, r: &Self, c: C) -> Result<Self> {
+    pub fn apply_op2<C: 'static + CustomOp2 + Send + Sync>(&self, r: &Self, c: C) -> MTensor {
         self.apply_op2_arc(r, Arc::new(Box::new(c)))
     }
 
@@ -218,7 +215,7 @@ impl Tensor {
         t2: &Self,
         t3: &Self,
         c: Arc<Box<dyn CustomOp3 + Send + Sync>>,
-    ) -> Result<Self> {
+    ) -> MTensor {
         let (storage, shape) = self.storage().apply_op3(
             self.layout(),
             &t2.storage(),
@@ -230,7 +227,7 @@ impl Tensor {
         let op = BackpropOp::new3(self, t2, t3, |t1, t2, t3| {
             Op::CustomOp3(t1, t2, t3, c.clone())
         });
-        Ok(from_storage(storage, shape, op, false))
+        from_storage(storage, shape, op, false).into()
     }
 
     pub fn apply_op3<C: 'static + CustomOp3 + Send + Sync>(
@@ -238,7 +235,7 @@ impl Tensor {
         t2: &Self,
         t3: &Self,
         c: C,
-    ) -> Result<Self> {
+    ) -> MTensor {
         self.apply_op3_arc(t2, t3, Arc::new(Box::new(c)))
     }
 }

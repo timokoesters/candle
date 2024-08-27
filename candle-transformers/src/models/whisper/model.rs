@@ -1,6 +1,6 @@
 use super::Config;
 use crate::models::with_tracing::{linear, linear_no_bias, Linear};
-use candle::{Device, IndexOp, Result, Tensor, D};
+use candle::{Device, IndexOp, MTensor, Result, Tensor, D};
 use candle_nn::{embedding, Conv1d, Conv1dConfig, Embedding, LayerNorm, Module, VarBuilder};
 
 fn conv1d(
@@ -63,7 +63,7 @@ impl MultiHeadAttention {
         xa: Option<&Tensor>,
         mask: Option<&Tensor>,
         flush_cache: bool,
-    ) -> Result<Tensor> {
+    ) -> MTensor {
         let _enter = self.span.enter();
         let q = self.query.forward(x)?;
         let (k, v) = match xa {
@@ -88,22 +88,16 @@ impl MultiHeadAttention {
         };
         let wv = self.qkv_attention(&q, &k, &v, mask)?;
         let out = self.out.forward(&wv)?;
-        Ok(out)
+        out.into()
     }
 
-    fn reshape_head(&self, x: &Tensor) -> Result<Tensor> {
+    fn reshape_head(&self, x: &Tensor) -> MTensor {
         let (n_batch, n_ctx, n_state) = x.dims3()?;
         let target_dims = &[n_batch, n_ctx, self.n_head, n_state / self.n_head];
         x.reshape(target_dims)?.transpose(1, 2)
     }
 
-    fn qkv_attention(
-        &self,
-        q: &Tensor,
-        k: &Tensor,
-        v: &Tensor,
-        mask: Option<&Tensor>,
-    ) -> Result<Tensor> {
+    fn qkv_attention(&self, q: &Tensor, k: &Tensor, v: &Tensor, mask: Option<&Tensor>) -> MTensor {
         let (_, n_ctx, n_state) = q.dims3()?;
         let scale = ((n_state / self.n_head) as f64).powf(-0.25);
         let q = (self.reshape_head(q)? * scale)?;
@@ -127,7 +121,7 @@ impl MultiHeadAttention {
         }
         .transpose(1, 2)?
         .flatten_from(2)?;
-        Ok(wv)
+        wv.into()
     }
 
     fn reset_kv_cache(&mut self) {
@@ -180,7 +174,7 @@ impl ResidualAttentionBlock {
         xa: Option<&Tensor>,
         mask: Option<&Tensor>,
         flush_kv_cache: bool,
-    ) -> Result<Tensor> {
+    ) -> MTensor {
         let _enter = self.span.enter();
         let attn = self
             .attn
@@ -206,7 +200,7 @@ impl ResidualAttentionBlock {
     }
 }
 
-fn sinusoids(length: usize, channels: usize, device: &Device) -> Result<Tensor> {
+fn sinusoids(length: usize, channels: usize, device: &Device) -> MTensor {
     let max_timescale = 10000f32;
     let log_timescale_increment = max_timescale.ln() / (channels / 2 - 1) as f32;
     let inv_timescales: Vec<_> = (0..channels / 2)
@@ -219,7 +213,7 @@ fn sinusoids(length: usize, channels: usize, device: &Device) -> Result<Tensor> 
     let sh = (length, channels / 2);
     let scaled_time = (arange.broadcast_as(sh)? * inv_timescales.broadcast_as(sh)?)?;
     let sincos = Tensor::cat(&[scaled_time.sin()?, scaled_time.cos()?], 1)?;
-    Ok(sincos)
+    sincos.into()
 }
 
 // https://github.com/openai/whisper/blob/f572f2161ba831bae131364c3bffdead7af6d210/whisper/model.py#L143
@@ -276,7 +270,7 @@ impl AudioEncoder {
         })
     }
 
-    pub fn forward(&mut self, x: &Tensor, flush_kv_cache: bool) -> Result<Tensor> {
+    pub fn forward(&mut self, x: &Tensor, flush_kv_cache: bool) -> MTensor {
         let _enter = self.span.enter();
         let x = {
             let _enter = self.conv1_span.enter();
@@ -294,7 +288,7 @@ impl AudioEncoder {
             x = block.forward(&x, None, None, flush_kv_cache)?
         }
         let x = self.ln_post.forward(&x)?;
-        Ok(x)
+        x.into()
     }
 }
 
@@ -340,7 +334,7 @@ impl TextDecoder {
         })
     }
 
-    pub fn forward(&mut self, x: &Tensor, xa: &Tensor, flush_kv_cache: bool) -> Result<Tensor> {
+    pub fn forward(&mut self, x: &Tensor, xa: &Tensor, flush_kv_cache: bool) -> MTensor {
         let _enter = self.span.enter();
         let last = x.dim(D::Minus1)?;
         let token_embedding = self.token_embedding.forward(x)?;
@@ -352,14 +346,14 @@ impl TextDecoder {
         self.ln.forward(&x)
     }
 
-    pub fn final_linear(&self, x: &Tensor) -> Result<Tensor> {
+    pub fn final_linear(&self, x: &Tensor) -> MTensor {
         let b_size = x.dim(0)?;
         let w = self.token_embedding.embeddings().broadcast_left(b_size)?;
         let logits = {
             let _enter = self.span_final.enter();
             x.matmul(&w.t()?)?
         };
-        Ok(logits)
+        logits.into()
     }
 
     pub fn reset_kv_cache(&mut self) {

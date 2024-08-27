@@ -1,4 +1,8 @@
-use crate::{op::BackpropOp, op::Op, Error, Result, Tensor};
+use crate::{
+    mtensor::MTensor,
+    op::{BackpropOp, Op},
+    Error, Result, Tensor,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParamsConv1D {
@@ -126,7 +130,7 @@ impl ParamsConvTranspose2D {
 }
 
 impl Tensor {
-    fn conv1d_single_group(&self, kernel: &Self, params: &ParamsConv1D) -> Result<Self> {
+    fn conv1d_single_group(&self, kernel: &Self, params: &ParamsConv1D) -> MTensor {
         let storage =
             self.storage()
                 .conv1d(self.layout(), &kernel.storage(), kernel.layout(), params)?;
@@ -138,7 +142,7 @@ impl Tensor {
             dilation: params.dilation,
         });
         let out_dims = params.out_dims();
-        Ok(crate::tensor::from_storage(storage, out_dims, op, false))
+        crate::tensor::from_storage(storage, out_dims, op, false).into()
     }
 
     /// Applies a 1D convolution over the input tensor.
@@ -149,7 +153,7 @@ impl Tensor {
         stride: usize,
         dilation: usize,
         groups: usize,
-    ) -> Result<Self> {
+    ) -> MTensor {
         let (c_out, c_in_k, k_size) = kernel.dims3()?;
         let (b_size, c_in, l_in) = self.dims3()?;
         if c_in != c_in_k * groups {
@@ -181,7 +185,7 @@ impl Tensor {
             let blocks = blocks
                 .iter()
                 .zip(&kernel)
-                .map(|(block, kernel)| block.conv1d_single_group(kernel, &params))
+                .map(|(block, kernel)| block.conv1d_single_group(kernel, &params).inner)
                 .collect::<Result<Vec<_>>>()?;
             Tensor::cat(&blocks, 1)
         }
@@ -191,7 +195,7 @@ impl Tensor {
         &self,
         kernel: &Self,
         params: &ParamsConvTranspose1D,
-    ) -> Result<Self> {
+    ) -> MTensor {
         let storage = self.storage().conv_transpose1d(
             self.layout(),
             &kernel.storage(),
@@ -207,7 +211,7 @@ impl Tensor {
             dilation: params.dilation,
         });
         let out_dims = params.out_dims();
-        Ok(crate::tensor::from_storage(storage, out_dims, op, false))
+        crate::tensor::from_storage(storage, out_dims, op, false).into()
     }
 
     /// Applies a 1D transposed convolution over the input tensor.
@@ -219,7 +223,7 @@ impl Tensor {
         stride: usize,
         dilation: usize,
         groups: usize,
-    ) -> Result<Self> {
+    ) -> MTensor {
         let (c_in_k, c_out, k_size) = kernel.dims3()?;
         let (b_size, c_in, l_in) = self.dims3()?;
         if c_in != c_in_k {
@@ -247,13 +251,13 @@ impl Tensor {
             let blocks = blocks
                 .iter()
                 .zip(&kernel)
-                .map(|(block, kernel)| block.conv_transpose1d_single_group(kernel, &params))
+                .map(|(block, kernel)| block.conv_transpose1d_single_group(kernel, &params).inner)
                 .collect::<Result<Vec<_>>>()?;
             Tensor::cat(&blocks, 1)
         }
     }
 
-    fn conv2d_single_group(&self, kernel: &Self, params: &ParamsConv2D) -> Result<Self> {
+    fn conv2d_single_group(&self, kernel: &Self, params: &ParamsConv2D) -> MTensor {
         let storage =
             self.storage()
                 .conv2d(self.layout(), &kernel.storage(), kernel.layout(), params)?;
@@ -265,7 +269,7 @@ impl Tensor {
             dilation: params.dilation,
         });
         let out_dims = params.out_dims();
-        Ok(crate::tensor::from_storage(storage, out_dims, op, false))
+        crate::tensor::from_storage(storage, out_dims, op, false).into()
     }
 
     /// Applies a 2D convolution over the input tensor.
@@ -276,7 +280,7 @@ impl Tensor {
         stride: usize,
         dilation: usize,
         groups: usize,
-    ) -> Result<Self> {
+    ) -> MTensor {
         let (b_size, c_in, i_h, i_w) = self.dims4()?;
         let (c_out, c_in_k, k_h, k_w) = kernel.dims4()?;
         if c_in != c_in_k * groups {
@@ -305,7 +309,7 @@ impl Tensor {
             let blocks = blocks
                 .iter()
                 .zip(&kernel)
-                .map(|(block, kernel)| block.conv2d_single_group(kernel, &params))
+                .map(|(block, kernel)| block.conv2d_single_group(kernel, &params).inner)
                 .collect::<Result<Vec<_>>>()?;
             Tensor::cat(&blocks, 1)
         }
@@ -319,7 +323,7 @@ impl Tensor {
         output_padding: usize,
         stride: usize,
         dilation: usize,
-    ) -> Result<Self> {
+    ) -> MTensor {
         let (b_size, c_in, i_h, i_w) = self.dims4()?;
         let (c_in_k, c_out, k_h, k_w) = kernel.dims4()?;
         if c_in != c_in_k {
@@ -353,6 +357,6 @@ impl Tensor {
             dilation: params.dilation,
         });
         let out_dims = params.out_dims();
-        Ok(crate::tensor::from_storage(storage, out_dims, op, false))
+        crate::tensor::from_storage(storage, out_dims, op, false).into()
     }
 }

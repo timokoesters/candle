@@ -1,4 +1,4 @@
-use crate::{Result, Shape, Tensor};
+use crate::{mtensor::MTensor, Result, Shape, Tensor};
 
 pub trait Dim: crate::shape::Dim + Copy {}
 impl<T: crate::shape::Dim + Copy> Dim for T {}
@@ -163,7 +163,7 @@ impl StreamingBinOp {
         self.prev_rhs.reset();
     }
 
-    pub fn forward(&self, lhs: &Tensor, rhs: &Tensor) -> Result<Tensor> {
+    pub fn forward(&self, lhs: &Tensor, rhs: &Tensor) -> MTensor {
         match self.op {
             BinOp::Add => Tensor::add(lhs, rhs),
             BinOp::Mul => Tensor::mul(lhs, rhs),

@@ -2,7 +2,7 @@
 //!
 //! See Very Deep Convolutional Networks for Large-Scale Image Recognition
 //! <https://arxiv.org/abs/1409.1556>
-use candle::{ModuleT, Result, Tensor};
+use candle::{MTensor, ModuleT, Result, Tensor};
 use candle_nn::{FuncT, VarBuilder};
 
 // Enum representing the different VGG models
@@ -40,7 +40,7 @@ impl<'a> Vgg<'a> {
 
 // Implementation of the forward pass for the VGG model
 impl ModuleT for Vgg<'_> {
-    fn forward_t(&self, xs: &Tensor, train: bool) -> Result<Tensor> {
+    fn forward_t(&self, xs: &Tensor, train: bool) -> MTensor {
         let mut xs = xs.unsqueeze(0)?;
         for block in self.blocks.iter() {
             xs = xs.apply_t(block, train)?;

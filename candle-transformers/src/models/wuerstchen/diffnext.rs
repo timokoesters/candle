@@ -1,5 +1,5 @@
 use super::common::{AttnBlock, GlobalResponseNorm, LayerNormNoWeights, TimestepBlock, WLayerNorm};
-use candle::{DType, Module, Result, Tensor, D};
+use candle::{DType, MTensor, Module, Result, Tensor, D};
 use candle_nn::VarBuilder;
 
 #[derive(Debug)]
@@ -32,7 +32,7 @@ impl ResBlockStageB {
         })
     }
 
-    pub fn forward(&self, xs: &Tensor, x_skip: Option<&Tensor>) -> Result<Tensor> {
+    pub fn forward(&self, xs: &Tensor, x_skip: Option<&Tensor>) -> MTensor {
         let x_res = xs;
         let xs = xs.apply(&self.depthwise)?.apply(&self.norm)?;
         let xs = match x_skip {
@@ -282,7 +282,7 @@ impl WDiffNeXt {
         })
     }
 
-    fn gen_r_embedding(&self, r: &Tensor) -> Result<Tensor> {
+    fn gen_r_embedding(&self, r: &Tensor) -> MTensor {
         const MAX_POSITIONS: usize = 10000;
         let r = (r * MAX_POSITIONS as f64)?;
         let half_dim = self.c_r / 2;
@@ -300,7 +300,7 @@ impl WDiffNeXt {
         emb.to_dtype(r.dtype())
     }
 
-    fn gen_c_embeddings(&self, clip: &Tensor) -> Result<Tensor> {
+    fn gen_c_embeddings(&self, clip: &Tensor) -> MTensor {
         clip.apply(&self.clip_mapper)?.apply(&self.seq_norm)
     }
 
@@ -310,7 +310,7 @@ impl WDiffNeXt {
         r: &Tensor,
         effnet: &Tensor,
         clip: Option<&Tensor>,
-    ) -> Result<Tensor> {
+    ) -> MTensor {
         const EPS: f64 = 1e-3;
 
         let r_embed = self.gen_r_embedding(r)?;

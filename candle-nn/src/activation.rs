@@ -1,4 +1,4 @@
-use candle::{Result, Tensor};
+use candle::{MTensor, Result, Tensor};
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize, Default)]
@@ -25,7 +25,7 @@ pub enum Activation {
 }
 
 impl super::Module for Activation {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         match self {
             Self::Gelu => xs.gelu_erf(),
             // https://github.com/huggingface/transformers/blob/12f043eaeaabfef6f6efea411d98e6f6d3c094b7/src/transformers/activations.py#L49-L78
@@ -67,7 +67,7 @@ impl PReLU {
 }
 
 impl candle::Module for PReLU {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let weight = if self.is_scalar {
             self.weight.reshape(())?
         } else if xs.rank() >= 2 {

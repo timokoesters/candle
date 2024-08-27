@@ -117,6 +117,6 @@ impl<'a> Iterator for DatasetRandomIter<'a> {
         let tokens = tokens.into_iter().map(|v| v as u32).collect::<Vec<_>>();
         let inputs = Tensor::new(&tokens[..seq_len], &self.device);
         let targets = Tensor::new(&tokens[1..], &self.device);
-        Some(candle::error::zip(inputs, targets))
+        Some(candle::error::zip(inputs.inner, targets.inner))
     }
 }

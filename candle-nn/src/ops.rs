@@ -1,4 +1,4 @@
-use candle::{CpuStorage, DType, Layout, Module, Result, Shape, Tensor, D};
+use candle::{CpuStorage, DType, Layout, MTensor, Module, Result, Shape, Tensor, D};
 use rayon::prelude::*;
 
 /// Applies the softmax function to the input tensor, rescaling the element so that elements on
@@ -16,7 +16,7 @@ use rayon::prelude::*;
 ///     ]);
 /// # Ok::<(), candle::Error>(())
 /// ```
-pub fn softmax<D: candle::shape::Dim>(xs: &Tensor, dim: D) -> Result<Tensor> {
+pub fn softmax<D: candle::shape::Dim>(xs: &Tensor, dim: D) -> MTensor {
     let dim = dim.to_index(xs.shape(), "softmax")?;
     let max = xs.max_keepdim(dim)?;
     let diff = xs.broadcast_sub(&max)?;
@@ -25,20 +25,20 @@ pub fn softmax<D: candle::shape::Dim>(xs: &Tensor, dim: D) -> Result<Tensor> {
     num.broadcast_div(&den)
 }
 
-pub fn log_softmax<D: candle::shape::Dim>(xs: &Tensor, d: D) -> Result<Tensor> {
+pub fn log_softmax<D: candle::shape::Dim>(xs: &Tensor, d: D) -> MTensor {
     let d = d.to_index(xs.shape(), "log-softmax")?;
     let max = xs.max_keepdim(d)?;
     let diff = xs.broadcast_sub(&max)?;
     let sum_exp = diff.exp()?.sum_keepdim(d)?;
-    let log_sm = diff.broadcast_sub(&sum_exp.log()?)?;
-    Ok(log_sm)
+    let log_sm = diff.broadcast_sub(&sum_exp.log()?);
+    log_sm
 }
 
-pub fn silu(xs: &Tensor) -> Result<Tensor> {
+pub fn silu(xs: &Tensor) -> MTensor {
     xs.silu()
 }
 
-pub fn swiglu(xs: &Tensor) -> Result<Tensor> {
+pub fn swiglu(xs: &Tensor) -> MTensor {
     let xs = xs.chunk(2, D::Minus1)?;
     &xs[0].silu()? * &xs[1]
 }
@@ -228,21 +228,21 @@ impl candle::CustomOp1 for Sigmoid {
     }
 }
 
-pub fn sigmoid(xs: &Tensor) -> Result<Tensor> {
+pub fn sigmoid(xs: &Tensor) -> MTensor {
     xs.apply_op1(Sigmoid)
 }
 
-pub fn hard_sigmoid(xs: &Tensor) -> Result<Tensor> {
+pub fn hard_sigmoid(xs: &Tensor) -> MTensor {
     // TODO: Should we have a specialized op for this?
     ((xs + 3.0)? / 6.0)?.clamp(0f32, 1f32)
 }
 
-pub fn leaky_relu(xs: &Tensor, negative_slope: f64) -> Result<Tensor> {
+pub fn leaky_relu(xs: &Tensor, negative_slope: f64) -> MTensor {
     let zeros = xs.zeros_like()?;
     xs.maximum(&zeros)? + xs.minimum(&zeros)? * negative_slope
 }
 
-pub fn dropout(xs: &Tensor, drop_p: f32) -> Result<Tensor> {
+pub fn dropout(xs: &Tensor, drop_p: f32) -> MTensor {
     // This implementation is inefficient as it stores the full mask for the backward pass.
     // Instead we could just store the seed and have a specialized kernel that would both
     // generate the random mask and apply it.
@@ -268,17 +268,17 @@ impl Dropout {
         Self { drop_p }
     }
 
-    pub fn forward(&self, xs: &Tensor, train: bool) -> Result<Tensor> {
+    pub fn forward(&self, xs: &Tensor, train: bool) -> MTensor {
         if train {
             dropout(xs, self.drop_p)
         } else {
-            Ok(xs.clone())
+            xs.clone().into()
         }
     }
 }
 
 impl candle::ModuleT for Dropout {
-    fn forward_t(&self, xs: &Tensor, train: bool) -> Result<Tensor> {
+    fn forward_t(&self, xs: &Tensor, train: bool) -> MTensor {
         self.forward(xs, train)
     }
 }
@@ -427,7 +427,7 @@ impl candle::CustomOp1 for SoftmaxLastDim {
     }
 }
 
-pub fn softmax_last_dim(xs: &Tensor) -> Result<Tensor> {
+pub fn softmax_last_dim(xs: &Tensor) -> MTensor {
     xs.apply_op1_no_bwd(&SoftmaxLastDim)
 }
 
@@ -614,7 +614,7 @@ impl candle::CustomOp2 for RmsNorm {
     }
 }
 
-pub fn rms_norm_slow(x: &Tensor, alpha: &Tensor, eps: f32) -> Result<Tensor> {
+pub fn rms_norm_slow(x: &Tensor, alpha: &Tensor, eps: f32) -> MTensor {
     let x_dtype = x.dtype();
     let internal_dtype = match x_dtype {
         DType::F16 | DType::BF16 => DType::F32,
@@ -627,7 +627,7 @@ pub fn rms_norm_slow(x: &Tensor, alpha: &Tensor, eps: f32) -> Result<Tensor> {
     x_normed.to_dtype(x_dtype)?.broadcast_mul(alpha)
 }
 
-pub fn rms_norm(xs: &Tensor, alpha: &Tensor, eps: f32) -> Result<Tensor> {
+pub fn rms_norm(xs: &Tensor, alpha: &Tensor, eps: f32) -> MTensor {
     let hidden_size_xs = xs.dim(D::Minus1)?;
     let hidden_size_alpha = alpha.dims1()?;
     if hidden_size_xs != hidden_size_alpha {
@@ -853,7 +853,7 @@ impl candle::CustomOp3 for LayerNorm {
     }
 }
 
-pub fn layer_norm_slow(x: &Tensor, alpha: &Tensor, beta: &Tensor, eps: f32) -> Result<Tensor> {
+pub fn layer_norm_slow(x: &Tensor, alpha: &Tensor, beta: &Tensor, eps: f32) -> MTensor {
     let x_dtype = x.dtype();
     let internal_dtype = match x_dtype {
         DType::F16 | DType::BF16 => DType::F32,
@@ -873,7 +873,7 @@ pub fn layer_norm_slow(x: &Tensor, alpha: &Tensor, beta: &Tensor, eps: f32) -> R
         .broadcast_add(beta)
 }
 
-pub fn layer_norm(xs: &Tensor, alpha: &Tensor, beta: &Tensor, eps: f32) -> Result<Tensor> {
+pub fn layer_norm(xs: &Tensor, alpha: &Tensor, beta: &Tensor, eps: f32) -> MTensor {
     let hidden_size_xs = xs.dim(D::Minus1)?;
     let hidden_size_alpha = alpha.dims1()?;
     let hidden_size_beta = beta.dims1()?;
@@ -889,7 +889,7 @@ pub fn layer_norm(xs: &Tensor, alpha: &Tensor, beta: &Tensor, eps: f32) -> Resul
 }
 
 // https://pytorch.org/docs/stable/generated/torch.nn.PixelShuffle.html
-pub fn pixel_shuffle(xs: &Tensor, upscale_factor: usize) -> Result<Tensor> {
+pub fn pixel_shuffle(xs: &Tensor, upscale_factor: usize) -> MTensor {
     let (b_size, c, h, w) = xs.dims4()?;
     let out_c = c / upscale_factor / upscale_factor;
     xs.reshape((b_size, out_c, upscale_factor, upscale_factor, h, w))?
@@ -897,7 +897,7 @@ pub fn pixel_shuffle(xs: &Tensor, upscale_factor: usize) -> Result<Tensor> {
         .reshape((b_size, out_c, h * upscale_factor, w * upscale_factor))
 }
 
-pub fn pixel_unshuffle(xs: &Tensor, downscale_factor: usize) -> Result<Tensor> {
+pub fn pixel_unshuffle(xs: &Tensor, downscale_factor: usize) -> MTensor {
     let (b_size, c, h, w) = xs.dims4()?;
     let out_c = c * downscale_factor * downscale_factor;
     xs.reshape((
@@ -913,9 +913,9 @@ pub fn pixel_unshuffle(xs: &Tensor, downscale_factor: usize) -> Result<Tensor> {
 }
 
 // https://pytorch.org/docs/stable/generated/torch.nn.ReplicationPad2d.html
-pub fn replication_pad2d(xs: &Tensor, pad: usize) -> Result<Tensor> {
+pub fn replication_pad2d(xs: &Tensor, pad: usize) -> MTensor {
     match pad {
-        0 => Ok(xs.clone()),
+        0 => xs.clone().into(),
         1 => {
             let (_b_size, _c, h, w) = xs.dims4()?;
             let (first, last) = (xs.narrow(3, 0, 1)?, xs.narrow(3, w - 1, 1)?);
@@ -943,7 +943,7 @@ impl Default for Identity {
 }
 
 impl Module for Identity {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        Ok(xs.clone())
+    fn forward(&self, xs: &Tensor) -> MTensor {
+        xs.clone().into()
     }
 }

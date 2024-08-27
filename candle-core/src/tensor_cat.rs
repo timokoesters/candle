@@ -1,4 +1,4 @@
-use crate::{shape::Dim, Error, Result, Shape, Tensor};
+use crate::{mtensor::MTensor, shape::Dim, Error, Result, Shape, Tensor};
 
 impl Tensor {
     /// Concatenates two or more tensors along a particular dimension.
@@ -18,13 +18,13 @@ impl Tensor {
     /// assert_eq!(c.shape().dims(), &[2, 6]);
     /// # Ok::<(), candle_core::Error>(())
     /// ```
-    pub fn cat<A: AsRef<Tensor>, D: Dim>(args: &[A], dim: D) -> Result<Self> {
+    pub fn cat<A: AsRef<Tensor>, D: Dim>(args: &[A], dim: D) -> MTensor {
         if args.is_empty() {
             Err(Error::OpRequiresAtLeastOneTensor { op: "cat" }.bt())?
         }
         let arg0 = args[0].as_ref();
         if args.len() == 1 {
-            return Ok(arg0.clone());
+            return arg0.clone().into();
         }
         let dim = dim.to_index(arg0.shape(), "cat")?;
         for arg in args {
@@ -66,20 +66,20 @@ impl Tensor {
         } else {
             let args: Vec<Tensor> = args
                 .iter()
-                .map(|a| a.as_ref().transpose(0, dim))
+                .map(|a| a.as_ref().transpose(0, dim).inner)
                 .collect::<Result<Vec<_>>>()?;
             let cat = Self::cat0(&args)?;
             cat.transpose(0, dim)
         }
     }
 
-    fn cat0<A: AsRef<Tensor>>(args: &[A]) -> Result<Self> {
+    fn cat0<A: AsRef<Tensor>>(args: &[A]) -> MTensor {
         if args.is_empty() {
             Err(Error::OpRequiresAtLeastOneTensor { op: "cat" }.bt())?
         }
         let arg0 = args[0].as_ref();
         if args.len() == 1 {
-            return Ok(arg0.clone());
+            return arg0.clone().into();
         }
         let rank = arg0.rank();
         let device = arg0.device();
@@ -145,16 +145,16 @@ impl Tensor {
             arg.storage()
                 .copy_strided_src(&mut storage, offset, arg.layout())?;
         }
-        Ok(crate::tensor::from_storage(storage, shape, op, false))
+        crate::tensor::from_storage(storage, shape, op, false).into()
     }
 
-    fn cat_contiguous<A: AsRef<Tensor>>(args: &[A], dim: usize) -> Result<Self> {
+    fn cat_contiguous<A: AsRef<Tensor>>(args: &[A], dim: usize) -> MTensor {
         if args.is_empty() {
             Err(Error::OpRequiresAtLeastOneTensor { op: "cat" }.bt())?
         }
         let arg0 = args[0].as_ref();
         if args.len() == 1 {
-            return Ok(arg0.clone());
+            return arg0.clone().into();
         }
         let rank = arg0.rank();
         let device = arg0.device();
@@ -233,7 +233,7 @@ impl Tensor {
             )?;
             dst_o += d2;
         }
-        Ok(crate::tensor::from_storage(storage, shape, op, false))
+        crate::tensor::from_storage(storage, shape, op, false).into()
     }
 
     /// Set the values on `self` using values from `src`. The copy starts at the specified

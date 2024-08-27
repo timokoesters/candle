@@ -1,7 +1,7 @@
 use crate::models::with_tracing::QMatMul;
 use crate::quantized_var_builder::VarBuilder;
 use candle::quantized::QTensor;
-use candle::{Module, Result, Tensor};
+use candle::{MTensor, Module, Result, Tensor};
 
 #[derive(Debug, Clone)]
 pub struct Embedding {
@@ -23,7 +23,7 @@ impl Embedding {
 }
 
 impl Module for Embedding {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let _enter = self.span.enter();
         self.inner.forward(xs)
     }
@@ -47,10 +47,10 @@ impl Linear {
 }
 
 impl Module for Linear {
-    fn forward(&self, x: &Tensor) -> candle::Result<Tensor> {
+    fn forward(&self, x: &Tensor) -> MTensor {
         let x = x.apply(&self.weight)?;
         match &self.bias {
-            None => Ok(x),
+            None => x.into(),
             Some(bias) => x.broadcast_add(bias),
         }
     }
@@ -113,7 +113,7 @@ impl RmsNorm {
 }
 
 impl Module for RmsNorm {
-    fn forward(&self, x: &Tensor) -> Result<Tensor> {
+    fn forward(&self, x: &Tensor) -> MTensor {
         let _enter = self.span.enter();
         candle_nn::ops::rms_norm(x, &self.weight, self.eps as f32)
     }

@@ -1,4 +1,4 @@
-use candle::{DType, Module, Result, Tensor, D};
+use candle::{DType, MTensor, Module, Result, Tensor, D};
 use candle_nn::VarBuilder;
 
 // https://github.com/huggingface/diffusers/blob/19edca82f1ff194c07317369a92b470dbae97f34/src/diffusers/pipelines/wuerstchen/modeling_wuerstchen_common.py#L22
@@ -14,7 +14,7 @@ impl WLayerNorm {
 }
 
 impl Module for WLayerNorm {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let xs = xs.permute((0, 2, 3, 1))?;
 
         let x_dtype = xs.dtype();
@@ -46,7 +46,7 @@ impl LayerNormNoWeights {
 }
 
 impl Module for LayerNormNoWeights {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let x_dtype = xs.dtype();
         let internal_dtype = match x_dtype {
             DType::F16 | DType::BF16 => DType::F32,
@@ -73,7 +73,7 @@ impl TimestepBlock {
         Ok(Self { mapper })
     }
 
-    pub fn forward(&self, xs: &Tensor, t: &Tensor) -> Result<Tensor> {
+    pub fn forward(&self, xs: &Tensor, t: &Tensor) -> MTensor {
         let ab = self
             .mapper
             .forward(t)?
@@ -99,7 +99,7 @@ impl GlobalResponseNorm {
 }
 
 impl Module for GlobalResponseNorm {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let agg_norm = xs.sqr()?.sum_keepdim((1, 2))?.sqrt()?;
         let stand_div_norm =
             agg_norm.broadcast_div(&(agg_norm.mean_keepdim(D::Minus1)? + 1e-6)?)?;
@@ -140,7 +140,7 @@ impl ResBlock {
         })
     }
 
-    pub fn forward(&self, xs: &Tensor, x_skip: Option<&Tensor>) -> Result<Tensor> {
+    pub fn forward(&self, xs: &Tensor, x_skip: Option<&Tensor>) -> MTensor {
         let x_res = xs;
         let xs = match x_skip {
             None => xs.clone(),
@@ -188,7 +188,7 @@ impl AttnBlock {
         })
     }
 
-    pub fn forward(&self, xs: &Tensor, kv: &Tensor) -> Result<Tensor> {
+    pub fn forward(&self, xs: &Tensor, kv: &Tensor) -> MTensor {
         let kv = candle_nn::ops::silu(kv)?.apply(&self.kv_mapper_lin)?;
         let norm_xs = self.norm.forward(xs)?;
         let kv = if self.self_attn {

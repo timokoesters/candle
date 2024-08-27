@@ -1,3 +1,5 @@
+#![feature(try_trait_v2)]
+
 //! ML framework for Rust
 //!
 //! ```rust
@@ -56,6 +58,7 @@ pub mod layout;
 pub mod metal_backend;
 #[cfg(feature = "mkl")]
 mod mkl;
+mod mtensor;
 pub mod npy;
 pub mod op;
 pub mod pickle;
@@ -83,6 +86,7 @@ pub use dtype::{DType, DTypeParseError, FloatDType, IntDType, WithDType};
 pub use error::{Error, Result};
 pub use indexer::IndexOp;
 pub use layout::Layout;
+pub use mtensor::MTensor;
 pub use shape::{Shape, D};
 pub use storage::Storage;
 pub use streaming::{StreamTensor, StreamingBinOp, StreamingModule};
@@ -128,19 +132,19 @@ impl ToUsize2 for (usize, usize) {
 
 // A simple trait defining a module with forward method using a single argument.
 pub trait Module {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor>;
+    fn forward(&self, xs: &Tensor) -> MTensor;
 }
 
-impl<T: Fn(&Tensor) -> Result<Tensor>> Module for T {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+impl<T: Fn(&Tensor) -> MTensor> Module for T {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         self(xs)
     }
 }
 
 impl<M: Module> Module for Option<&M> {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         match self {
-            None => Ok(xs.clone()),
+            None => xs.clone().into(),
             Some(m) => m.forward(xs),
         }
     }
@@ -149,11 +153,11 @@ impl<M: Module> Module for Option<&M> {
 // A trait defining a module with forward method using a single tensor argument and a flag to
 // separate the training and evaluation behaviors.
 pub trait ModuleT {
-    fn forward_t(&self, xs: &Tensor, train: bool) -> Result<Tensor>;
+    fn forward_t(&self, xs: &Tensor, train: bool) -> MTensor;
 }
 
 impl<M: Module> ModuleT for M {
-    fn forward_t(&self, xs: &Tensor, _train: bool) -> Result<Tensor> {
+    fn forward_t(&self, xs: &Tensor, _train: bool) -> MTensor {
         self.forward(xs)
     }
 }

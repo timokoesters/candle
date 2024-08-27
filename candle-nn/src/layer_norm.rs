@@ -28,7 +28,7 @@
 //! ```
 //!
 //! [`Layer Normalization`]: https://arxiv.org/abs/1607.06450
-use candle::{DType, Module, Result, Tensor, D};
+use candle::{DType, MTensor, Module, Result, Tensor, D};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LayerNormConfig {
@@ -106,7 +106,7 @@ impl LayerNorm {
 }
 
 impl Module for LayerNorm {
-    fn forward(&self, x: &Tensor) -> Result<Tensor> {
+    fn forward(&self, x: &Tensor) -> MTensor {
         if x.is_contiguous() && self.remove_mean {
             if let Some(bias) = self.bias.as_ref() {
                 return crate::ops::layer_norm(x, &self.weight, bias, self.eps as f32);
@@ -129,7 +129,7 @@ impl Module for LayerNorm {
         let x_normed = x.broadcast_div(&(norm_x + self.eps)?.sqrt()?)?;
         let x = x_normed.to_dtype(x_dtype)?.broadcast_mul(&self.weight)?;
         match &self.bias {
-            None => Ok(x),
+            None => x.into(),
             Some(bias) => x.broadcast_add(bias),
         }
     }
@@ -169,13 +169,13 @@ impl RmsNorm {
     }
 
     /// Faster variant of the forward kernel, this can only be used on contiguous tensors though.
-    pub fn forward_diff(&self, xs: &Tensor) -> Result<Tensor> {
+    pub fn forward_diff(&self, xs: &Tensor) -> MTensor {
         self.0.forward(xs)
     }
 }
 
 impl Module for RmsNorm {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         if xs.is_contiguous() {
             crate::ops::rms_norm(xs, &self.0.weight, self.0.eps as f32)
         } else {

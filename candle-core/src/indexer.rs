@@ -81,7 +81,7 @@ impl From<usize> for TensorIndexer {
 
 impl From<&[u32]> for TensorIndexer {
     fn from(index: &[u32]) -> Self {
-        match Tensor::new(index, &crate::Device::Cpu) {
+        match Tensor::new(index, &crate::Device::Cpu).inner {
             Ok(tensor) => TensorIndexer::IndexSelect(tensor),
             Err(e) => TensorIndexer::Err(e),
         }
@@ -91,7 +91,7 @@ impl From<&[u32]> for TensorIndexer {
 impl From<Vec<u32>> for TensorIndexer {
     fn from(index: Vec<u32>) -> Self {
         let len = index.len();
-        match Tensor::from_vec(index, len, &crate::Device::Cpu) {
+        match Tensor::from_vec(index, len, &crate::Device::Cpu).inner {
             Ok(tensor) => TensorIndexer::IndexSelect(tensor),
             Err(e) => TensorIndexer::Err(e),
         }

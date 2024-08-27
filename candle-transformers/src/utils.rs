@@ -1,6 +1,6 @@
-use candle::{Result, Tensor};
+use candle::{MTensor, Result, Tensor};
 
-pub fn apply_repeat_penalty(logits: &Tensor, penalty: f32, context: &[u32]) -> Result<Tensor> {
+pub fn apply_repeat_penalty(logits: &Tensor, penalty: f32, context: &[u32]) -> MTensor {
     let device = logits.device();
     let mut logits = logits.to_dtype(candle::DType::F32)?.to_vec1::<f32>()?;
     let mut already_seen = std::collections::HashSet::new();
@@ -23,9 +23,9 @@ pub fn apply_repeat_penalty(logits: &Tensor, penalty: f32, context: &[u32]) -> R
 
 /// Repeats a key or value tensor for grouped query attention
 /// The input tensor should have a shape `(batch, num_kv_heads, seq_len, head_dim)`,
-pub fn repeat_kv(xs: Tensor, n_rep: usize) -> Result<Tensor> {
+pub fn repeat_kv(xs: Tensor, n_rep: usize) -> MTensor {
     if n_rep == 1 {
-        Ok(xs)
+        xs.into()
     } else {
         let (b_sz, n_kv_head, seq_len, head_dim) = xs.dims4()?;
         // Using cat is faster than a broadcast as it avoids going through a potentially

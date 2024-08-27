@@ -1,4 +1,4 @@
-use crate::{Result, Tensor};
+use crate::{mtensor::MTensor, Result, Tensor};
 use rayon::prelude::*;
 
 #[derive(Debug, Clone, Copy)]
@@ -206,11 +206,12 @@ impl Tensor {
     /// If `asc` is `true`, sorting is in ascending order. Otherwise sorting is performed in
     /// descending order. The sort is unstable so there is no guarantees on the final order when it
     /// comes to ties.
-    pub fn arg_sort_last_dim(&self, asc: bool) -> Result<Tensor> {
+    pub fn arg_sort_last_dim(&self, asc: bool) -> MTensor {
         if !self.is_contiguous() {
             return Err(crate::Error::RequiresContiguous {
                 op: "arg_sort_last_dim",
-            });
+            })
+            .into();
         }
         let last_dim = match self.dims().last() {
             None => crate::bail!("empty last-dim in arg-sort"),

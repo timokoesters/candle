@@ -1,4 +1,4 @@
-use candle::{Result, Tensor};
+use candle::{MTensor, Tensor};
 
 /// The negative log likelihood loss.
 ///
@@ -9,7 +9,7 @@ use candle::{Result, Tensor};
 /// * [target]: The ground truth labels as a tensor of u32 of dimension `N`.
 ///
 /// The resulting tensor is a scalar containing the average value over the batch.
-pub fn nll(inp: &Tensor, target: &Tensor) -> Result<Tensor> {
+pub fn nll(inp: &Tensor, target: &Tensor) -> MTensor {
     let b_sz = match target.dims() {
         &[b_sz] => b_sz,
         dims => candle::bail!("the target tensor should have a single dimension ({dims:?})"),
@@ -36,7 +36,7 @@ pub fn nll(inp: &Tensor, target: &Tensor) -> Result<Tensor> {
 /// * [target]: The ground truth labels as a tensor of u32 of dimension `N`.
 ///
 /// The resulting tensor is a scalar containing the average value over the batch.
-pub fn cross_entropy(inp: &Tensor, target: &Tensor) -> Result<Tensor> {
+pub fn cross_entropy(inp: &Tensor, target: &Tensor) -> MTensor {
     if inp.rank() != 2 {
         candle::bail!("cross_entropy expects an input tensor of rank 2")
     }
@@ -45,7 +45,7 @@ pub fn cross_entropy(inp: &Tensor, target: &Tensor) -> Result<Tensor> {
 }
 
 /// The mean squared error loss.
-pub fn mse(inp: &Tensor, target: &Tensor) -> Result<Tensor> {
+pub fn mse(inp: &Tensor, target: &Tensor) -> MTensor {
     (inp - target)?.sqr()?.mean_all()
 }
 
@@ -59,7 +59,7 @@ pub fn mse(inp: &Tensor, target: &Tensor) -> Result<Tensor> {
 ///          of categories.
 ///
 /// The resulting tensor is a scalar containing the average value over the batch.
-pub fn binary_cross_entropy_with_logit(inp: &Tensor, target: &Tensor) -> Result<Tensor> {
+pub fn binary_cross_entropy_with_logit(inp: &Tensor, target: &Tensor) -> MTensor {
     let inp = crate::ops::sigmoid(inp)?;
 
     let left_side = target * inp.log()?;
@@ -68,5 +68,5 @@ pub fn binary_cross_entropy_with_logit(inp: &Tensor, target: &Tensor) -> Result<
     let loss = left_side? + right_side?;
     let loss = loss?.neg()?.mean_all()?;
 
-    Ok(loss)
+    loss.into()
 }

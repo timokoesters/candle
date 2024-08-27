@@ -7,7 +7,7 @@
 //! running stats.
 //!
 //! [`Batch Normalization`]: https://arxiv.org/abs/1502.03167
-use candle::{DType, Result, Tensor, Var};
+use candle::{DType, MTensor, Result, Tensor, Var};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BatchNormConfig {
@@ -192,7 +192,7 @@ impl BatchNorm {
         self.momentum
     }
 
-    pub fn forward_train(&self, x: &Tensor) -> Result<Tensor> {
+    pub fn forward_train(&self, x: &Tensor) -> MTensor {
         let num_features = self.running_mean.as_tensor().dim(0)?;
         let x_dtype = x.dtype();
         let internal_dtype = match x_dtype {
@@ -252,7 +252,7 @@ impl BatchNorm {
         x.reshape(x_dims_post_transpose)?.transpose(0, 1)
     }
 
-    fn forward_eval(&self, x: &Tensor) -> Result<Tensor> {
+    fn forward_eval(&self, x: &Tensor) -> MTensor {
         let target_shape: Vec<usize> = x
             .dims()
             .iter()
@@ -278,7 +278,7 @@ impl BatchNorm {
             )?;
 
         match &self.weight_and_bias {
-            None => Ok(x),
+            None => x.into(),
             Some((weight, bias)) => {
                 let weight = weight.reshape(target_shape)?;
                 let bias = bias.reshape(target_shape)?;
@@ -289,7 +289,7 @@ impl BatchNorm {
 }
 
 impl crate::ModuleT for BatchNorm {
-    fn forward_t(&self, x: &Tensor, train: bool) -> Result<Tensor> {
+    fn forward_t(&self, x: &Tensor, train: bool) -> MTensor {
         if train {
             self.forward_train(x)
         } else {

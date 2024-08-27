@@ -1,6 +1,6 @@
 //! Convolution Layers.
 use crate::BatchNorm;
-use candle::{Result, Tensor};
+use candle::{MTensor, Result, Tensor};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Conv1dConfig {
@@ -51,7 +51,7 @@ impl Conv1d {
 }
 
 impl crate::Module for Conv1d {
-    fn forward(&self, x: &Tensor) -> Result<Tensor> {
+    fn forward(&self, x: &Tensor) -> MTensor {
         let x = x.conv1d(
             &self.weight,
             self.config.padding,
@@ -60,11 +60,11 @@ impl crate::Module for Conv1d {
             self.config.groups,
         )?;
         match &self.bias {
-            None => Ok(x),
+            None => x.into(),
             Some(bias) => {
                 let b = bias.dims1()?;
                 let bias = bias.reshape((1, b, 1))?;
-                Ok(x.broadcast_add(&bias)?)
+                x.broadcast_add(&bias)
             }
         }
     }
@@ -121,7 +121,7 @@ impl ConvTranspose1d {
 }
 
 impl crate::Module for ConvTranspose1d {
-    fn forward(&self, x: &Tensor) -> Result<Tensor> {
+    fn forward(&self, x: &Tensor) -> MTensor {
         let x = x.conv_transpose1d(
             &self.weight,
             self.config.padding,
@@ -131,11 +131,11 @@ impl crate::Module for ConvTranspose1d {
             self.config.groups,
         )?;
         match &self.bias {
-            None => Ok(x),
+            None => x.into(),
             Some(bias) => {
                 let b = bias.dims1()?;
                 let bias = bias.reshape((1, b, 1))?;
-                Ok(x.broadcast_add(&bias)?)
+                x.broadcast_add(&bias)
             }
         }
     }
@@ -210,7 +210,7 @@ impl Conv2d {
 }
 
 impl crate::Module for Conv2d {
-    fn forward(&self, x: &Tensor) -> Result<Tensor> {
+    fn forward(&self, x: &Tensor) -> MTensor {
         let x = x.conv2d(
             &self.weight,
             self.config.padding,
@@ -219,11 +219,11 @@ impl crate::Module for Conv2d {
             self.config.groups,
         )?;
         match &self.bias {
-            None => Ok(x),
+            None => x.into(),
             Some(bias) => {
                 let b = bias.dims1()?;
                 let bias = bias.reshape((1, b, 1, 1))?;
-                Ok(x.broadcast_add(&bias)?)
+                x.broadcast_add(&bias)
             }
         }
     }
@@ -279,7 +279,7 @@ impl ConvTranspose2d {
 }
 
 impl crate::Module for ConvTranspose2d {
-    fn forward(&self, x: &Tensor) -> Result<Tensor> {
+    fn forward(&self, x: &Tensor) -> MTensor {
         let x = x.conv_transpose2d(
             &self.weight,
             self.config.padding,
@@ -288,11 +288,11 @@ impl crate::Module for ConvTranspose2d {
             self.config.dilation,
         )?;
         match &self.bias {
-            None => Ok(x),
+            None => x.into(),
             Some(bias) => {
                 let b = bias.dims1()?;
                 let bias = bias.reshape((1, b, 1, 1))?;
-                Ok(x.broadcast_add(&bias)?)
+                x.broadcast_add(&bias)
             }
         }
     }

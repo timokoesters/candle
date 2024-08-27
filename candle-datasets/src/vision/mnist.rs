@@ -31,7 +31,7 @@ fn read_labels(filename: &std::path::Path) -> Result<Tensor> {
     let mut data = vec![0u8; samples as usize];
     buf_reader.read_exact(&mut data)?;
     let samples = data.len();
-    Tensor::from_vec(data, samples, &Device::Cpu)
+    Tensor::from_vec(data, samples, &Device::Cpu).inner
 }
 
 fn read_images(filename: &std::path::Path) -> Result<Tensor> {
@@ -44,7 +44,7 @@ fn read_images(filename: &std::path::Path) -> Result<Tensor> {
     let mut data = vec![0u8; data_len];
     buf_reader.read_exact(&mut data)?;
     let tensor = Tensor::from_vec(data, (samples, rows * cols), &Device::Cpu)?;
-    tensor.to_dtype(DType::F32)? / 255.
+    (tensor.to_dtype(DType::F32)? / 255.0).inner
 }
 
 pub fn load_dir<T: AsRef<std::path::Path>>(dir: T) -> Result<crate::vision::Dataset> {

@@ -1,5 +1,5 @@
 use crate::models::with_tracing::{conv2d, linear, linear_no_bias, Conv2d, Linear};
-use candle::{IndexOp, Module, Result, Tensor, D};
+use candle::{IndexOp, MTensor, Module, Result, Tensor, D};
 use candle_nn::{layer_norm, LayerNorm, VarBuilder};
 
 // https://github.com/huggingface/transformers/blob/main/src/transformers/models/vit/configuration_vit.py
@@ -80,7 +80,7 @@ impl PatchEmbeddings {
 }
 
 impl Module for PatchEmbeddings {
-    fn forward(&self, pixel_values: &Tensor) -> Result<Tensor> {
+    fn forward(&self, pixel_values: &Tensor) -> MTensor {
         let (_b_size, _num_channels, _height, _width) = pixel_values.dims4()?;
         self.projection
             .forward(pixel_values)?
@@ -125,7 +125,7 @@ impl Embeddings {
         _embeddings: &Tensor,
         _height: usize,
         _width: usize,
-    ) -> Result<Tensor> {
+    ) -> MTensor {
         todo!()
     }
 
@@ -134,7 +134,7 @@ impl Embeddings {
         pixel_values: &Tensor,
         bool_masked_pos: Option<&Tensor>,
         interpolate_pos_encoding: bool,
-    ) -> Result<Tensor> {
+    ) -> MTensor {
         let (b_size, _num_channels, height, width) = pixel_values.dims4()?;
         let embeddings = self.patch_embeddings.forward(pixel_values)?;
         let embeddings = match (bool_masked_pos, &self.mask_token) {
@@ -193,7 +193,7 @@ impl SelfAttention {
         })
     }
 
-    fn transpose_for_scores(&self, xs: &Tensor) -> Result<Tensor> {
+    fn transpose_for_scores(&self, xs: &Tensor) -> MTensor {
         let (b_size, seq_len, _) = xs.dims3()?;
         xs.reshape((
             b_size,
@@ -206,7 +206,7 @@ impl SelfAttention {
 }
 
 impl Module for SelfAttention {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let query = self.query.forward(xs)?;
         let key = self.key.forward(xs)?;
         let value = self.value.forward(xs)?;
@@ -239,7 +239,7 @@ impl SelfOutput {
 }
 
 impl Module for SelfOutput {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         xs.apply(&self.dense)
     }
 }
@@ -259,7 +259,7 @@ impl Attention {
 }
 
 impl Module for Attention {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         xs.apply(&self.attention)?.apply(&self.output)
     }
 }
@@ -281,7 +281,7 @@ impl Intermediate {
 }
 
 impl Module for Intermediate {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         xs.apply(&self.dense)?.apply(&self.intermediate_act_fn)
     }
 }
@@ -297,7 +297,7 @@ impl Output {
         Ok(Self { dense })
     }
 
-    fn forward(&self, xs: &Tensor, input_tensor: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor, input_tensor: &Tensor) -> MTensor {
         xs.apply(&self.dense)? + input_tensor
     }
 }
@@ -330,7 +330,7 @@ impl Layer {
 }
 
 impl Module for Layer {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let xs = (xs.apply(&self.layernorm_before)?.apply(&self.attention)? + xs)?;
         let ys = xs.apply(&self.layernorm_after)?.apply(&self.intermediate)?;
         self.output.forward(&ys, &xs)
@@ -355,12 +355,12 @@ impl Encoder {
 }
 
 impl Module for Encoder {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let mut xs = xs.clone();
         for layer in self.layers.iter() {
             xs = xs.apply(layer)?
         }
-        Ok(xs)
+        xs.into()
     }
 }
 
@@ -388,7 +388,7 @@ impl Model {
         })
     }
 
-    pub fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    pub fn forward(&self, xs: &Tensor) -> MTensor {
         let embedding_output = self.embeddings.forward(xs, None, false)?;
         let encoder_outputs = self.encoder.forward(&embedding_output)?;
         encoder_outputs

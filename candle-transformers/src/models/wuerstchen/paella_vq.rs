@@ -1,5 +1,5 @@
 use super::common::LayerNormNoWeights;
-use candle::{Module, Result, Tensor};
+use candle::{MTensor, Module, Result, Tensor};
 use candle_nn::VarBuilder;
 
 #[derive(Debug)]
@@ -36,7 +36,7 @@ impl MixingResidualBlock {
 }
 
 impl Module for MixingResidualBlock {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let mods = &self.gammas;
         let x_temp = xs
             .permute((0, 2, 3, 1))?
@@ -176,7 +176,7 @@ impl PaellaVQ {
         })
     }
 
-    pub fn encode(&self, xs: &Tensor) -> Result<Tensor> {
+    pub fn encode(&self, xs: &Tensor) -> MTensor {
         let mut xs = candle_nn::ops::pixel_unshuffle(xs, 2)?.apply(&self.in_block_conv)?;
         for down_block in self.down_blocks.iter() {
             if let Some(conv) = &down_block.0 {
@@ -188,7 +188,7 @@ impl PaellaVQ {
             .apply_t(&self.down_blocks_bn, false)
     }
 
-    pub fn decode(&self, xs: &Tensor) -> Result<Tensor> {
+    pub fn decode(&self, xs: &Tensor) -> MTensor {
         // TODO: quantizer if we want to support `force_not_quantize=False`.
         let mut xs = xs.apply(&self.up_blocks_conv)?;
         for up_block in self.up_blocks.iter() {
@@ -205,7 +205,7 @@ impl PaellaVQ {
 }
 
 impl Module for PaellaVQ {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         self.decode(&self.encode(xs)?)
     }
 }

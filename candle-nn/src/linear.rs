@@ -17,7 +17,7 @@
 //! assert_eq!(ys.to_vec2::<f32>()?, &[[210.0, 430.0, 650.0]]);
 //! # Ok(()) }
 //! ```
-use candle::{Result, Tensor};
+use candle::{MTensor, Result, Tensor};
 
 #[derive(Clone, Debug)]
 pub struct Linear {
@@ -40,7 +40,7 @@ impl Linear {
 }
 
 impl super::Module for Linear {
-    fn forward(&self, x: &Tensor) -> candle::Result<Tensor> {
+    fn forward(&self, x: &Tensor) -> MTensor {
         let w = match *x.dims() {
             [b1, b2, _, _] => self.weight.broadcast_left((b1, b2))?.t()?,
             [bsize, _, _] => self.weight.broadcast_left(bsize)?.t()?,
@@ -48,7 +48,7 @@ impl super::Module for Linear {
         };
         let x = x.matmul(&w)?;
         match &self.bias {
-            None => Ok(x),
+            None => x.into(),
             Some(bias) => x.broadcast_add(bias),
         }
     }

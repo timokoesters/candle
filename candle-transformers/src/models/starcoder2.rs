@@ -1,5 +1,5 @@
 #![allow(unused)]
-use candle::{DType, Device, Module, Result, Tensor, D};
+use candle::{DType, Device, MTensor, Module, Result, Tensor, D};
 use candle_nn::{layer_norm, linear_b, LayerNorm, Linear, VarBuilder};
 use std::sync::Arc;
 
@@ -25,7 +25,7 @@ struct RotaryEmbedding {
     cos: Tensor,
 }
 
-fn rotate_half(xs: &Tensor) -> Result<Tensor> {
+fn rotate_half(xs: &Tensor) -> MTensor {
     let last_dim = xs.dim(D::Minus1)?;
     let xs1 = xs.narrow(D::Minus1, 0, last_dim / 2)?;
     let xs2 = xs.narrow(D::Minus1, last_dim / 2, last_dim - last_dim / 2)?;
@@ -92,7 +92,7 @@ impl MLP {
 }
 
 impl Module for MLP {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         xs.apply(&self.c_fc)?.apply(&self.act)?.apply(&self.c_proj)
     }
 }
@@ -144,7 +144,7 @@ impl Attention {
         xs: &Tensor,
         attention_mask: Option<&Tensor>,
         seqlen_offset: usize,
-    ) -> Result<Tensor> {
+    ) -> MTensor {
         let (b_sz, q_len, _) = xs.dims3()?;
 
         let query_states = self.q_proj.forward(xs)?;
@@ -230,7 +230,7 @@ impl DecoderLayer {
         xs: &Tensor,
         attention_mask: Option<&Tensor>,
         seqlen_offset: usize,
-    ) -> Result<Tensor> {
+    ) -> MTensor {
         let residual = xs;
         let xs = self.input_layernorm.forward(xs)?;
         let xs = self.self_attn.forward(&xs, attention_mask, seqlen_offset)?;
@@ -286,7 +286,7 @@ impl Model {
         b_size: usize,
         tgt_len: usize,
         seqlen_offset: usize,
-    ) -> Result<Tensor> {
+    ) -> MTensor {
         let sliding_window = self.sliding_window.unwrap_or(tgt_len + 42);
         let mask: Vec<_> = (0..tgt_len)
             .flat_map(|i| {
@@ -310,7 +310,7 @@ impl Model {
             .to_dtype(self.dtype)
     }
 
-    pub fn forward(&mut self, input_ids: &Tensor, seqlen_offset: usize) -> Result<Tensor> {
+    pub fn forward(&mut self, input_ids: &Tensor, seqlen_offset: usize) -> MTensor {
         let (b_size, seq_len) = input_ids.dims2()?;
         let attention_mask = if seq_len <= 1 {
             None

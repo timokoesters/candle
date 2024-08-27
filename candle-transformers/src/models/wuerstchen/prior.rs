@@ -1,5 +1,5 @@
 use super::common::{AttnBlock, ResBlock, TimestepBlock};
-use candle::{DType, Result, Tensor, D};
+use candle::{DType, MTensor, Result, Tensor, D};
 use candle_nn::VarBuilder;
 
 #[derive(Debug)]
@@ -66,7 +66,7 @@ impl WPrior {
         })
     }
 
-    pub fn gen_r_embedding(&self, r: &Tensor) -> Result<Tensor> {
+    pub fn gen_r_embedding(&self, r: &Tensor) -> MTensor {
         const MAX_POSITIONS: usize = 10000;
         let r = (r * MAX_POSITIONS as f64)?;
         let half_dim = self.c_r / 2;
@@ -84,7 +84,7 @@ impl WPrior {
         emb.to_dtype(r.dtype())
     }
 
-    pub fn forward(&self, xs: &Tensor, r: &Tensor, c: &Tensor) -> Result<Tensor> {
+    pub fn forward(&self, xs: &Tensor, r: &Tensor, c: &Tensor) -> MTensor {
         let x_in = xs;
         let mut xs = xs.apply(&self.projection)?;
         let c_embed = c

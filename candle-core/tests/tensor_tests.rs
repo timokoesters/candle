@@ -1125,14 +1125,22 @@ fn randn(device: &Device) -> Result<()> {
     // There once was a bug that had a deterministic zero element in evenly sized tensors.
     const N: usize = 2;
     let v = (0..100)
-        .map(|_| Tensor::randn(0f32, 1f32, N, device).and_then(|t| t.to_vec1::<f32>()))
+        .map(|_| {
+            Tensor::randn(0f32, 1f32, N, device)
+                .inner
+                .and_then(|t| t.to_vec1::<f32>())
+        })
         .collect::<Result<Vec<_>>>()?;
     assert!(
         (0..N).all(|i| v.windows(2).any(|pair| pair[0][i] != pair[1][i])),
         "There are deterministic values in the randn tensors"
     );
     let v = (0..100)
-        .map(|_| Tensor::rand(0f32, 1f32, N, device).and_then(|t| t.to_vec1::<f32>()))
+        .map(|_| {
+            Tensor::rand(0f32, 1f32, N, device)
+                .inner
+                .and_then(|t| t.to_vec1::<f32>())
+        })
         .collect::<Result<Vec<_>>>()?;
     assert!(
         (0..N).all(|i| v.windows(2).any(|pair| pair[0][i] != pair[1][i])),

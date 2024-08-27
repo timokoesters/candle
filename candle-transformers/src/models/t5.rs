@@ -2,7 +2,7 @@
 // https://github.com/huggingface/transformers/blob/main/src/transformers/models/t5/modeling_t5.py
 
 use crate::models::with_tracing::{linear_no_bias, Embedding, Linear};
-use candle::{DType, Device, Module, Result, Tensor, D};
+use candle::{DType, Device, MTensor, Module, Result, Tensor, D};
 use candle_nn::{Activation, VarBuilder};
 use serde::Deserialize;
 use std::sync::Arc;
@@ -23,18 +23,18 @@ fn default_tie_word_embeddings() -> bool {
     true
 }
 
-fn get_mask(size: usize, device: &Device) -> Result<Tensor> {
+fn get_mask(size: usize, device: &Device) -> MTensor {
     let mask: Vec<_> = (0..size)
         .flat_map(|i| (0..size).map(move |j| u8::from(j > i)))
         .collect();
     Tensor::from_slice(&mask, (size, size), device)
 }
 
-fn masked_fill(on_false: &Tensor, mask: &Tensor, on_true: f32) -> Result<Tensor> {
+fn masked_fill(on_false: &Tensor, mask: &Tensor, on_true: f32) -> MTensor {
     let shape = mask.shape();
     let on_true = Tensor::new(on_true, on_false.device())?.broadcast_as(shape.dims())?;
     let m = mask.where_cond(&on_true, on_false)?;
-    Ok(m)
+    m.into()
 }
 
 #[derive(Debug, Deserialize, Default, Clone, PartialEq)]
@@ -177,7 +177,7 @@ impl T5LayerNorm {
 }
 
 impl Module for T5LayerNorm {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let _enter = self.span.enter();
         let dtype = xs.dtype();
         let xs_f32 = xs.to_dtype(DType::F32)?;
@@ -186,7 +186,7 @@ impl Module for T5LayerNorm {
         let xs = xs_f32.broadcast_div(&(variance + self.variance_epsilon)?.sqrt()?)?;
         let xs = xs.to_dtype(dtype)?;
         let xs = xs.broadcast_mul(&self.weight)?;
-        Ok(xs)
+        xs.into()
     }
 }
 
@@ -212,12 +212,12 @@ impl T5DenseActDense {
 }
 
 impl Module for T5DenseActDense {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let _enter = self.span.enter();
         let xs = self.wi.forward(xs)?;
         let xs = self.act.forward(&xs)?;
         let xs = self.wo.forward(&xs)?;
-        Ok(xs)
+        xs.into()
     }
 }
 
@@ -246,13 +246,13 @@ impl T5DenseGatedActDense {
 }
 
 impl Module for T5DenseGatedActDense {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let _enter = self.span.enter();
         let hidden_gelu = self.act.forward(&self.wi_0.forward(xs)?)?;
         let hidden_linear = self.wi_1.forward(xs)?;
         let xs = hidden_gelu.broadcast_mul(&hidden_linear)?;
         let xs = self.wo.forward(&xs)?;
-        Ok(xs)
+        xs.into()
     }
 }
 
@@ -289,7 +289,7 @@ impl T5LayerFF {
 }
 
 impl Module for T5LayerFF {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let _enter = self.span.enter();
         let ys = self.layer_norm.forward(xs)?;
         let ys = match &self.dense_act {
@@ -297,7 +297,7 @@ impl Module for T5LayerFF {
             None => self.gated_dense_act.as_ref().unwrap().forward(&ys)?,
         };
         let xs = (xs + ys)?;
-        Ok(xs)
+        xs.into()
     }
 }
 
@@ -674,11 +674,7 @@ impl T5Stack {
         })
     }
 
-    fn forward(
-        &mut self,
-        input_ids: &Tensor,
-        encoder_hidden_states: Option<&Tensor>,
-    ) -> Result<Tensor> {
+    fn forward(&mut self, input_ids: &Tensor, encoder_hidden_states: Option<&Tensor>) -> MTensor {
         let _enter = self.span.enter();
         let input_embeds = self.shared.as_ref().forward(input_ids)?;
         let mut hidden_states = input_embeds;
@@ -724,7 +720,7 @@ impl T5EncoderModel {
         })
     }
 
-    pub fn forward(&mut self, input_ids: &Tensor) -> Result<Tensor> {
+    pub fn forward(&mut self, input_ids: &Tensor) -> MTensor {
         let _enter = self.span.enter();
         self.encoder.forward(input_ids, None)
     }
@@ -799,15 +795,11 @@ impl T5ForConditionalGeneration {
         })
     }
 
-    pub fn encode(&mut self, input_ids: &Tensor) -> Result<Tensor> {
+    pub fn encode(&mut self, input_ids: &Tensor) -> MTensor {
         self.encoder.forward(input_ids, None)
     }
 
-    pub fn decode(
-        &mut self,
-        decoder_input_ids: &Tensor,
-        encoder_output: &Tensor,
-    ) -> Result<Tensor> {
+    pub fn decode(&mut self, decoder_input_ids: &Tensor, encoder_output: &Tensor) -> MTensor {
         let _enter = self.span_decode.enter();
         let decoder_output = self
             .decoder
@@ -831,10 +823,10 @@ impl T5ForConditionalGeneration {
                 Some(ref lm_head) => lm_head.forward(&sequence_output)?,
             }
         };
-        Ok(output)
+        output.into()
     }
 
-    pub fn forward(&mut self, input_ids: &Tensor, decoder_input_ids: &Tensor) -> Result<Tensor> {
+    pub fn forward(&mut self, input_ids: &Tensor, decoder_input_ids: &Tensor) -> MTensor {
         let encoder_output = self.encode(input_ids)?;
         self.decode(decoder_input_ids, &encoder_output)
     }

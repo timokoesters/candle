@@ -1,6 +1,6 @@
 //! Encoding Utilities. (e.g., one-hot/cold encoding)
 
-use candle::{bail, DType, Result, Tensor, WithDType};
+use candle::{bail, DType, MTensor, Result, Tensor, WithDType};
 
 /// One-hot/cold encoding.
 ///
@@ -84,12 +84,7 @@ use candle::{bail, DType, Result, Tensor, WithDType};
 /// # API Design
 ///
 /// The api design for this method is loosely based on the [TensorFlow One-Hot](https://www.tensorflow.org/api_docs/python/tf/one_hot) method.
-pub fn one_hot<D: WithDType>(
-    indices: Tensor,
-    depth: usize,
-    on_value: D,
-    off_value: D,
-) -> Result<Tensor> {
+pub fn one_hot<D: WithDType>(indices: Tensor, depth: usize, on_value: D, off_value: D) -> MTensor {
     let mut target_shape = indices.dims().to_vec();
     target_shape.push(depth);
     let indices = indices.flatten_all()?;

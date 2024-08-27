@@ -1,3 +1,4 @@
+use crate::mtensor::MTensor;
 use crate::{DType, Device, Error, Result, Tensor, WithDType};
 use safetensors::tensor as st;
 use safetensors::tensor::SafeTensors;
@@ -84,7 +85,7 @@ impl Tensor {
     }
 }
 
-fn convert_slice<T: WithDType>(data: &[u8], shape: &[usize], device: &Device) -> Result<Tensor> {
+fn convert_slice<T: WithDType>(data: &[u8], shape: &[usize], device: &Device) -> MTensor {
     let size_in_bytes = T::DTYPE.size_in_bytes();
     let elem_count = data.len() / size_in_bytes;
     if (data.as_ptr() as usize) % size_in_bytes == 0 {
@@ -114,7 +115,7 @@ fn convert_slice_with_cast<T: Sized + Copy, U: WithDType, F: Fn(T) -> Result<U>>
     shape: &[usize],
     device: &Device,
     conv: F,
-) -> Result<Tensor> {
+) -> MTensor {
     let size_in_bytes = std::mem::size_of::<T>();
     let elem_count = data.len() / size_in_bytes;
     if (data.as_ptr() as usize) % size_in_bytes == 0 {
@@ -145,11 +146,11 @@ fn convert_with_cast_<T: Sized + Copy, U: WithDType, F: Fn(T) -> Result<U>>(
     view: &st::TensorView<'_>,
     device: &Device,
     conv: F,
-) -> Result<Tensor> {
+) -> MTensor {
     convert_slice_with_cast::<T, U, F>(view.data(), view.shape(), device, conv)
 }
 
-fn convert_<T: WithDType>(view: &st::TensorView<'_>, device: &Device) -> Result<Tensor> {
+fn convert_<T: WithDType>(view: &st::TensorView<'_>, device: &Device) -> MTensor {
     convert_slice::<T>(view.data(), view.shape(), device)
 }
 
@@ -168,22 +169,17 @@ fn convert_back_<T: WithDType>(mut vs: Vec<T>) -> Vec<u8> {
 }
 
 pub trait Load {
-    fn load(&self, device: &Device) -> Result<Tensor>;
+    fn load(&self, device: &Device) -> MTensor;
 }
 
 impl<'a> Load for st::TensorView<'a> {
-    fn load(&self, device: &Device) -> Result<Tensor> {
+    fn load(&self, device: &Device) -> MTensor {
         convert(self, device)
     }
 }
 
 impl Tensor {
-    pub fn from_raw_buffer(
-        data: &[u8],
-        dtype: DType,
-        shape: &[usize],
-        device: &Device,
-    ) -> Result<Self> {
+    pub fn from_raw_buffer(data: &[u8], dtype: DType, shape: &[usize], device: &Device) -> MTensor {
         match dtype {
             DType::U8 => convert_slice::<u8>(data, shape, device),
             DType::U32 => convert_slice::<u32>(data, shape, device),
@@ -196,7 +192,7 @@ impl Tensor {
     }
 }
 
-fn convert(view: &st::TensorView<'_>, device: &Device) -> Result<Tensor> {
+fn convert(view: &st::TensorView<'_>, device: &Device) -> MTensor {
     match view.dtype() {
         st::Dtype::U8 => convert_::<u8>(view, device),
         st::Dtype::U16 => {
@@ -213,7 +209,7 @@ fn convert(view: &st::TensorView<'_>, device: &Device) -> Result<Tensor> {
         st::Dtype::F16 => convert_::<half::f16>(view, device),
         st::Dtype::F32 => convert_::<f32>(view, device),
         st::Dtype::F64 => convert_::<f64>(view, device),
-        dtype => Err(Error::UnsupportedSafeTensorDtype(dtype)),
+        dtype => Err(Error::UnsupportedSafeTensorDtype(dtype)).into(),
     }
 }
 
@@ -320,7 +316,7 @@ impl MmapedSafetensors {
         })
     }
 
-    pub fn load(&self, name: &str, dev: &Device) -> Result<Tensor> {
+    pub fn load(&self, name: &str, dev: &Device) -> MTensor {
         self.get(name)?.load(dev)
     }
 
@@ -360,8 +356,11 @@ impl<'a> SliceSafetensors<'a> {
         Ok(Self { safetensors })
     }
 
-    pub fn load(&self, name: &str, dev: &Device) -> Result<Tensor> {
-        self.safetensors.tensor(name)?.load(dev)
+    pub fn load(&self, name: &str, dev: &Device) -> MTensor {
+        self.safetensors
+            .tensor(name)
+            .map_err(|e| e.into())?
+            .load(dev)
     }
 
     pub fn tensors(&self) -> Vec<(String, st::TensorView<'_>)> {
@@ -390,7 +389,7 @@ impl BufferedSafetensors {
         Ok(Self { safetensors })
     }
 
-    pub fn load(&self, name: &str, dev: &Device) -> Result<Tensor> {
+    pub fn load(&self, name: &str, dev: &Device) -> MTensor {
         self.get(name)?.load(dev)
     }
 

@@ -1,5 +1,5 @@
 use crate::models::with_tracing::{linear, linear_no_bias, Linear};
-use candle::{DType, Device, Module, Result, Tensor, D};
+use candle::{DType, Device, MTensor, Module, Result, Tensor, D};
 use candle_nn::{Activation, LayerNorm, VarBuilder};
 use serde::Deserialize;
 use std::sync::Arc;
@@ -68,7 +68,7 @@ pub(crate) struct RotaryEmbedding {
     cos: Tensor,
 }
 
-fn rotate_half(xs: &Tensor) -> Result<Tensor> {
+fn rotate_half(xs: &Tensor) -> MTensor {
     let xs = xs.chunk(2, D::Minus1)?;
     Tensor::cat(&[&xs[1].neg()?, &xs[0]], D::Minus1)
 }
@@ -139,7 +139,7 @@ impl MLP {
 }
 
 impl Module for MLP {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let _enter = self.span.enter();
         let lhs = xs.apply(&self.gate_proj)?.apply(&self.act_fn)?;
         let rhs = xs.apply(&self.up_proj)?;
@@ -148,18 +148,12 @@ impl Module for MLP {
 }
 
 #[cfg(feature = "flash-attn")]
-fn flash_attn(
-    q: &Tensor,
-    k: &Tensor,
-    v: &Tensor,
-    softmax_scale: f32,
-    causal: bool,
-) -> Result<Tensor> {
+fn flash_attn(q: &Tensor, k: &Tensor, v: &Tensor, softmax_scale: f32, causal: bool) -> MTensor {
     candle_flash_attn::flash_attn(q, k, v, softmax_scale, causal)
 }
 
 #[cfg(not(feature = "flash-attn"))]
-fn flash_attn(_: &Tensor, _: &Tensor, _: &Tensor, _: f32, _: bool) -> Result<Tensor> {
+fn flash_attn(_: &Tensor, _: &Tensor, _: &Tensor, _: f32, _: bool) -> MTensor {
     unimplemented!("compile with '--features flash-attn'")
 }
 
@@ -222,7 +216,7 @@ impl Attention {
         xs: &Tensor,
         attention_mask: Option<&Tensor>,
         seqlen_offset: usize,
-    ) -> Result<Tensor> {
+    ) -> MTensor {
         let _enter = self.span.enter();
         let (b_sz, q_len, _) = xs.dims3()?;
 
@@ -329,7 +323,7 @@ impl DecoderLayer {
         xs: &Tensor,
         attention_mask: Option<&Tensor>,
         seqlen_offset: usize,
-    ) -> Result<Tensor> {
+    ) -> MTensor {
         let _enter = self.span.enter();
         let residual = xs;
         let xs = self.input_layernorm.forward(xs)?;
@@ -382,7 +376,7 @@ impl Model {
         b_size: usize,
         tgt_len: usize,
         seqlen_offset: usize,
-    ) -> Result<Tensor> {
+    ) -> MTensor {
         // Sliding window mask?
         let mask: Vec<_> = (0..tgt_len)
             .flat_map(|i| (0..tgt_len).map(move |j| if i < j { f32::NEG_INFINITY } else { 0. }))
@@ -398,7 +392,7 @@ impl Model {
             .to_dtype(self.dtype)
     }
 
-    pub fn forward(&mut self, input_ids: &Tensor, seqlen_offset: usize) -> Result<Tensor> {
+    pub fn forward(&mut self, input_ids: &Tensor, seqlen_offset: usize) -> MTensor {
         let _enter = self.span.enter();
         let (b_size, seq_len) = input_ids.dims2()?;
         let attention_mask = if seq_len <= 1 {

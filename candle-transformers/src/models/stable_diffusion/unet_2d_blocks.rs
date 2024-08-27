@@ -5,7 +5,7 @@ use super::attention::{
 };
 use super::resnet::{ResnetBlock2D, ResnetBlock2DConfig};
 use crate::models::with_tracing::{conv2d, Conv2d};
-use candle::{Module, Result, Tensor, D};
+use candle::{MTensor, Module, Result, Tensor, D};
 use candle_nn as nn;
 
 #[derive(Debug)]
@@ -44,7 +44,7 @@ impl Downsample2D {
 }
 
 impl Module for Downsample2D {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let _enter = self.span.enter();
         match &self.conv {
             None => xs.avg_pool2d(2),
@@ -82,7 +82,7 @@ impl Upsample2D {
 }
 
 impl Upsample2D {
-    fn forward(&self, xs: &Tensor, size: Option<(usize, usize)>) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor, size: Option<(usize, usize)>) -> MTensor {
         let _enter = self.span.enter();
         let xs = match size {
             None => {
@@ -173,7 +173,7 @@ impl DownEncoderBlock2D {
 }
 
 impl Module for DownEncoderBlock2D {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let _enter = self.span.enter();
         let mut xs = xs.clone();
         for resnet in self.resnets.iter() {
@@ -257,7 +257,7 @@ impl UpDecoderBlock2D {
 }
 
 impl Module for UpDecoderBlock2D {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let _enter = self.span.enter();
         let mut xs = xs.clone();
         for resnet in self.resnets.iter() {
@@ -265,7 +265,7 @@ impl Module for UpDecoderBlock2D {
         }
         match &self.upsampler {
             Some(upsampler) => upsampler.forward(&xs, None),
-            None => Ok(xs),
+            None => xs.into(),
         }
     }
 }
@@ -345,7 +345,7 @@ impl UNetMidBlock2D {
         })
     }
 
-    pub fn forward(&self, xs: &Tensor, temb: Option<&Tensor>) -> Result<Tensor> {
+    pub fn forward(&self, xs: &Tensor, temb: Option<&Tensor>) -> MTensor {
         let _enter = self.span.enter();
         let mut xs = self.resnet.forward(xs, temb)?;
         for (attn, resnet) in self.attn_resnets.iter() {
@@ -453,7 +453,7 @@ impl UNetMidBlock2DCrossAttn {
         xs: &Tensor,
         temb: Option<&Tensor>,
         encoder_hidden_states: Option<&Tensor>,
-    ) -> Result<Tensor> {
+    ) -> MTensor {
         let _enter = self.span.enter();
         let mut xs = self.resnet.forward(xs, temb)?;
         for (attn, resnet) in self.attn_resnets.iter() {
@@ -749,7 +749,7 @@ impl UpBlock2D {
         res_xs: &[Tensor],
         temb: Option<&Tensor>,
         upsample_size: Option<(usize, usize)>,
-    ) -> Result<Tensor> {
+    ) -> MTensor {
         let _enter = self.span.enter();
         let mut xs = xs.clone();
         for (index, resnet) in self.resnets.iter().enumerate() {
@@ -851,7 +851,7 @@ impl CrossAttnUpBlock2D {
         temb: Option<&Tensor>,
         upsample_size: Option<(usize, usize)>,
         encoder_hidden_states: Option<&Tensor>,
-    ) -> Result<Tensor> {
+    ) -> MTensor {
         let _enter = self.span.enter();
         let mut xs = xs.clone();
         for (index, resnet) in self.upblock.resnets.iter().enumerate() {

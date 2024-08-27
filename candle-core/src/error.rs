@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{DType, DeviceLocation, Layout, MetalError, Shape};
 
 #[derive(Debug, Clone)]
@@ -203,8 +205,8 @@ pub enum Error {
 
     #[error("{inner}\n{backtrace}")]
     WithBacktrace {
-        inner: Box<Self>,
-        backtrace: Box<std::backtrace::Backtrace>,
+        inner: Arc<Self>,
+        backtrace: Arc<std::backtrace::Backtrace>,
     },
 
     /// User generated error message, typically created via `bail!`.
@@ -233,8 +235,8 @@ impl Error {
             std::backtrace::BacktraceStatus::Disabled
             | std::backtrace::BacktraceStatus::Unsupported => self,
             _ => Self::WithBacktrace {
-                inner: Box::new(self),
-                backtrace: Box::new(backtrace),
+                inner: Arc::new(self),
+                backtrace: Arc::new(backtrace),
             },
         }
     }
@@ -250,13 +252,13 @@ impl Error {
 #[macro_export]
 macro_rules! bail {
     ($msg:literal $(,)?) => {
-        return Err($crate::Error::Msg(format!($msg).into()).bt())
+        return Err($crate::Error::Msg(format!($msg).into()).bt()).into()
     };
     ($err:expr $(,)?) => {
-        return Err($crate::Error::Msg(format!($err).into()).bt())
+        return Err($crate::Error::Msg(format!($err).into()).bt()).into()
     };
     ($fmt:expr, $($arg:tt)*) => {
-        return Err($crate::Error::Msg(format!($fmt, $($arg)*).into()).bt())
+        return Err($crate::Error::Msg(format!($fmt, $($arg)*).into()).bt()).into()
     };
 }
 

@@ -1,7 +1,7 @@
 //! Group Normalization.
 //!
 //! This layer applies Group Normalization over a mini-batch of inputs.
-use candle::{DType, Result, Tensor};
+use candle::{DType, MTensor, Result, Tensor};
 
 // This group norm version handles both weight and bias so removes the mean.
 #[derive(Clone, Debug)]
@@ -37,7 +37,7 @@ impl GroupNorm {
 }
 
 impl crate::Module for GroupNorm {
-    fn forward(&self, x: &Tensor) -> Result<Tensor> {
+    fn forward(&self, x: &Tensor) -> MTensor {
         let x_shape = x.dims();
         if x_shape.len() <= 2 {
             candle::bail!("input rank for GroupNorm should be at least 3");

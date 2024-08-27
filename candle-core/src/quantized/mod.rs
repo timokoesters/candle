@@ -1,4 +1,4 @@
-use crate::{CpuStorage, DType, Device, Result, Shape, Storage, Tensor};
+use crate::{mtensor::MTensor, CpuStorage, DType, Device, Result, Shape, Storage, Tensor};
 use k_quants::*;
 use std::borrow::Cow;
 
@@ -357,13 +357,13 @@ impl QTensor {
         &self.shape
     }
 
-    pub fn dequantize(&self, device: &Device) -> Result<Tensor> {
+    pub fn dequantize(&self, device: &Device) -> MTensor {
         let storage = self.storage.dequantize(self.shape.elem_count())?;
         let none = crate::op::BackpropOp::none();
         crate::tensor::from_storage(storage, self.shape.clone(), none, false).to_device(device)
     }
 
-    pub fn dequantize_f16(&self, device: &Device) -> Result<Tensor> {
+    pub fn dequantize_f16(&self, device: &Device) -> MTensor {
         // In the CUDA case, we have a specialized kernel as this can be useful for volta
         // architectures. https://github.com/huggingface/candle/issues/2136
         match &self.storage {
@@ -375,7 +375,7 @@ impl QTensor {
             }
             _ => {
                 let s = self.dequantize(device)?.to_dtype(crate::DType::F16)?;
-                Ok(s)
+                s.into()
             }
         }
     }
@@ -440,15 +440,15 @@ impl QMatMul {
         Self::from_arc(std::sync::Arc::new(qtensor))
     }
 
-    pub fn dequantize_f16(&self) -> Result<Tensor> {
+    pub fn dequantize_f16(&self) -> MTensor {
         match self {
             Self::QTensor(t) => t.dequantize_f16(&t.device()),
             Self::Tensor(t) => t.to_dtype(DType::F16),
-            Self::TensorF16(t) => Ok(t.clone()),
+            Self::TensorF16(t) => t.clone().into(),
         }
     }
 
-    pub fn forward_via_f16(&self, xs: &Tensor) -> Result<Tensor> {
+    pub fn forward_via_f16(&self, xs: &Tensor) -> MTensor {
         let w = self.dequantize_f16()?;
         let in_dtype = xs.dtype();
         let w = match *xs.dims() {
@@ -524,7 +524,7 @@ impl crate::CustomOp1 for QTensor {
 }
 
 impl crate::Module for QMatMul {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         match self {
             Self::QTensor(t) => xs.apply_op1_no_bwd(t.as_ref()),
             Self::Tensor(w) => {

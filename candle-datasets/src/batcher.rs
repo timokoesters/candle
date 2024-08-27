@@ -85,7 +85,7 @@ impl<I: Iterator<Item = Tensor>> Iterator for Batcher<Iter1<I>> {
                 }
             }
         }
-        Some(Tensor::stack(&items, 0))
+        Some(Tensor::stack(&items, 0).inner)
     }
 }
 
@@ -111,7 +111,7 @@ impl<I: Iterator<Item = (Tensor, Tensor)>> Iterator for Batcher<Iter2<I>> {
         }
         let xs = Tensor::stack(&xs, 0);
         let ys = Tensor::stack(&ys, 0);
-        Some(xs.and_then(|xs| ys.map(|ys| (xs, ys))))
+        Some(xs.inner.and_then(|xs| ys.inner.map(|ys| (xs, ys))))
     }
 }
 
@@ -135,7 +135,7 @@ impl<I: Iterator<Item = Result<Tensor>>> Iterator for Batcher<IterResult1<I>> {
             }
         }
         let items = items.into_iter().collect::<Result<Vec<Tensor>>>();
-        Some(items.and_then(|items| Tensor::stack(&items, 0)))
+        Some(items.and_then(|items| Tensor::stack(&items, 0).inner))
     }
 }
 
@@ -166,6 +166,6 @@ impl<I: Iterator<Item = Result<(Tensor, Tensor)>>> Iterator for Batcher<IterResu
         }
         let xs = Tensor::stack(&xs, 0);
         let ys = Tensor::stack(&ys, 0);
-        Some(xs.and_then(|xs| ys.map(|ys| (xs, ys))))
+        Some(xs.inner.and_then(|xs| ys.inner.map(|ys| (xs, ys))))
     }
 }

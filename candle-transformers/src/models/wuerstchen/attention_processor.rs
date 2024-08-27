@@ -1,4 +1,4 @@
-use candle::{Module, Result, Tensor};
+use candle::{MTensor, Module, Result, Tensor};
 use candle_nn::{linear, Linear, VarBuilder};
 
 // A simplified version of:
@@ -15,18 +15,12 @@ pub struct Attention {
 }
 
 #[cfg(feature = "flash-attn")]
-fn flash_attn(
-    q: &Tensor,
-    k: &Tensor,
-    v: &Tensor,
-    softmax_scale: f32,
-    causal: bool,
-) -> Result<Tensor> {
+fn flash_attn(q: &Tensor, k: &Tensor, v: &Tensor, softmax_scale: f32, causal: bool) -> MTensor {
     candle_flash_attn::flash_attn(q, k, v, softmax_scale, causal)
 }
 
 #[cfg(not(feature = "flash-attn"))]
-fn flash_attn(_: &Tensor, _: &Tensor, _: &Tensor, _: f32, _: bool) -> Result<Tensor> {
+fn flash_attn(_: &Tensor, _: &Tensor, _: &Tensor, _: f32, _: bool) -> MTensor {
     unimplemented!("compile with '--features flash-attn'")
 }
 
@@ -55,26 +49,26 @@ impl Attention {
         })
     }
 
-    fn batch_to_head_dim(&self, xs: &Tensor) -> Result<Tensor> {
+    fn batch_to_head_dim(&self, xs: &Tensor) -> MTensor {
         let (b_size, seq_len, dim) = xs.dims3()?;
         xs.reshape((b_size / self.heads, self.heads, seq_len, dim))?
             .permute((0, 2, 1, 3))?
             .reshape((b_size / self.heads, seq_len, dim * self.heads))
     }
 
-    fn head_to_batch_dim(&self, xs: &Tensor) -> Result<Tensor> {
+    fn head_to_batch_dim(&self, xs: &Tensor) -> MTensor {
         let (b_size, seq_len, dim) = xs.dims3()?;
         xs.reshape((b_size, seq_len, self.heads, dim / self.heads))?
             .permute((0, 2, 1, 3))?
             .reshape((b_size * self.heads, seq_len, dim / self.heads))
     }
 
-    fn get_attention_scores(&self, query: &Tensor, key: &Tensor) -> Result<Tensor> {
+    fn get_attention_scores(&self, query: &Tensor, key: &Tensor) -> MTensor {
         let attn_probs = (query.matmul(&key.t()?)? * self.scale)?;
         candle_nn::ops::softmax_last_dim(&attn_probs)
     }
 
-    pub fn forward(&self, xs: &Tensor, encoder_hidden_states: &Tensor) -> Result<Tensor> {
+    pub fn forward(&self, xs: &Tensor, encoder_hidden_states: &Tensor) -> MTensor {
         let (b_size, channel, h, w) = xs.dims4()?;
         let xs = xs.reshape((b_size, channel, h * w))?.t()?;
 

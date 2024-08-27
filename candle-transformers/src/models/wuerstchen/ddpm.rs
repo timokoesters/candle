@@ -1,4 +1,4 @@
-use candle::{Result, Tensor};
+use candle::{MTensor, Result, Tensor};
 
 #[derive(Debug, Clone)]
 pub struct DDPMWSchedulerConfig {
@@ -77,7 +77,7 @@ impl DDPMWScheduler {
         sample
     }
 
-    pub fn step(&self, model_output: &Tensor, ts: f64, sample: &Tensor) -> Result<Tensor> {
+    pub fn step(&self, model_output: &Tensor, ts: f64, sample: &Tensor) -> MTensor {
         let prev_t = self.previous_timestep(ts);
 
         let alpha_cumprod = self.alpha_cumprod(ts);
@@ -91,7 +91,7 @@ impl DDPMWScheduler {
         let std =
             std_noise * ((1. - alpha) * (1. - alpha_cumprod_prev) / (1. - alpha_cumprod)).sqrt();
         if prev_t == 0. {
-            Ok(mu)
+            mu.into()
         } else {
             mu + std
         }

@@ -1,7 +1,7 @@
 /// Pretty printing of tensors
 /// This implementation should be in line with the PyTorch version.
 /// https://github.com/pytorch/pytorch/blob/7b419e8513a024e172eae767e24ec1b849976b13/torch/_tensor_str.py
-use crate::{DType, Result, Tensor, WithDType};
+use crate::{mtensor::MTensor, DType, Result, Tensor, WithDType};
 use half::{bf16, f16};
 
 impl Tensor {
@@ -170,7 +170,7 @@ trait TensorFormatter {
 
     fn max_width(&self, to_display: &Tensor) -> usize {
         let mut max_width = 1;
-        if let Ok(vs) = to_display.flatten_all().and_then(|t| t.to_vec1()) {
+        if let Ok(vs) = to_display.flatten_all().inner.and_then(|t| t.to_vec1()) {
             for &v in vs.iter() {
                 let mut fmt_size = FmtSize::new();
                 let _res = self.fmt(v, 1, &mut fmt_size);
@@ -209,6 +209,7 @@ trait TensorFormatter {
             [v] if summarize && *v > 2 * edge_items => {
                 if let Ok(vs) = t
                     .narrow(0, 0, edge_items)
+                    .inner
                     .and_then(|t| t.to_vec1::<Self::Elem>())
                 {
                     for v in vs.into_iter() {
@@ -219,6 +220,7 @@ trait TensorFormatter {
                 write!(f, "...")?;
                 if let Ok(vs) = t
                     .narrow(0, v - edge_items, edge_items)
+                    .inner
                     .and_then(|t| t.to_vec1::<Self::Elem>())
                 {
                     for v in vs.into_iter() {
@@ -246,7 +248,7 @@ trait TensorFormatter {
             _ => {
                 if summarize && dims[0] > 2 * edge_items {
                     for i in 0..edge_items {
-                        match t.get(i) {
+                        match &*t.get(i) {
                             Ok(t) => self.fmt_tensor(&t, indent + 1, max_w, summarize, po, f)?,
                             Err(e) => write!(f, "{e:?}")?,
                         }
@@ -256,7 +258,7 @@ trait TensorFormatter {
                     write!(f, "...")?;
                     Self::write_newline_indent(indent, f)?;
                     for i in dims[0] - edge_items..dims[0] {
-                        match t.get(i) {
+                        match &*t.get(i) {
                             Ok(t) => self.fmt_tensor(&t, indent + 1, max_w, summarize, po, f)?,
                             Err(e) => write!(f, "{e:?}")?,
                         }
@@ -267,7 +269,7 @@ trait TensorFormatter {
                     }
                 } else {
                     for i in 0..dims[0] {
-                        match t.get(i) {
+                        match &*t.get(i) {
                             Ok(t) => self.fmt_tensor(&t, indent + 1, max_w, summarize, po, f)?,
                             Err(e) => write!(f, "{e:?}")?,
                         }
@@ -406,10 +408,10 @@ where
     }
 }
 
-fn get_summarized_data(t: &Tensor, edge_items: usize) -> Result<Tensor> {
+fn get_summarized_data(t: &Tensor, edge_items: usize) -> MTensor {
     let dims = t.dims();
     if dims.is_empty() {
-        Ok(t.clone())
+        t.clone().into()
     } else if dims.len() == 1 {
         if dims[0] > 2 * edge_items {
             Tensor::cat(
@@ -420,11 +422,11 @@ fn get_summarized_data(t: &Tensor, edge_items: usize) -> Result<Tensor> {
                 0,
             )
         } else {
-            Ok(t.clone())
+            t.clone().into()
         }
     } else if dims[0] > 2 * edge_items {
         let mut vs: Vec<_> = (0..edge_items)
-            .map(|i| get_summarized_data(&t.get(i)?, edge_items))
+            .map(|i| get_summarized_data(&t.get(i)?, edge_items).inner)
             .collect::<Result<Vec<_>>>()?;
         for i in (dims[0] - edge_items)..dims[0] {
             vs.push(get_summarized_data(&t.get(i)?, edge_items)?)
@@ -432,7 +434,7 @@ fn get_summarized_data(t: &Tensor, edge_items: usize) -> Result<Tensor> {
         Tensor::cat(&vs, 0)
     } else {
         let vs: Vec<_> = (0..dims[0])
-            .map(|i| get_summarized_data(&t.get(i)?, edge_items))
+            .map(|i| get_summarized_data(&t.get(i)?, edge_items).inner)
             .collect::<Result<Vec<_>>>()?;
         Tensor::cat(&vs, 0)
     }
@@ -443,7 +445,7 @@ impl std::fmt::Display for Tensor {
         let po = PRINT_OPTS.lock().unwrap();
         let summarize = self.elem_count() > po.threshold;
         let to_display = if summarize {
-            match get_summarized_data(self, po.edge_items) {
+            match get_summarized_data(self, po.edge_items).inner {
                 Ok(v) => v,
                 Err(err) => return write!(f, "{err:?}"),
             }

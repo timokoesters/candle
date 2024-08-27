@@ -1,5 +1,5 @@
 //! Embedding Layer.
-use candle::{Result, Tensor};
+use candle::{MTensor, Result, Tensor};
 
 #[derive(Clone, Debug)]
 pub struct Embedding {
@@ -26,13 +26,13 @@ impl Embedding {
 }
 
 impl crate::Module for Embedding {
-    fn forward(&self, indexes: &Tensor) -> Result<Tensor> {
+    fn forward(&self, indexes: &Tensor) -> MTensor {
         let mut final_dims = indexes.dims().to_vec();
         final_dims.push(self.hidden_size);
         let indexes = indexes.flatten_all()?;
         let values = self.embeddings.index_select(&indexes, 0)?;
         let values = values.reshape(final_dims)?;
-        Ok(values)
+        values.into()
     }
 }
 

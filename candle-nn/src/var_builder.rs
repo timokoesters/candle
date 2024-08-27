@@ -2,6 +2,7 @@
 //! from a pre-trained checkpoint, e.g. using `VarBuilder::from_mmaped_safetensors`, or initialized
 //! for training, e.g. using `VarBuilder::from_varmap`.
 use crate::VarMap;
+use candle::MTensor;
 use candle::{safetensors::Load, DType, Device, Error, Result, Shape, Tensor};
 use safetensors::{slice::IndexOp, tensor::SafeTensors};
 use std::collections::HashMap;
@@ -47,42 +48,21 @@ pub trait Backend: Send + Sync {
     type Hints: Default;
 
     /// Retrieve a tensor with some target shape.
-    fn get(
-        &self,
-        s: Shape,
-        name: &str,
-        h: Self::Hints,
-        dtype: DType,
-        dev: &Device,
-    ) -> Result<Tensor>;
+    fn get(&self, s: Shape, name: &str, h: Self::Hints, dtype: DType, dev: &Device) -> MTensor;
 
     fn contains_tensor(&self, name: &str) -> bool;
 }
 
 pub trait SimpleBackend: Send + Sync {
     /// Retrieve a tensor based on a target name and shape.
-    fn get(
-        &self,
-        s: Shape,
-        name: &str,
-        h: crate::Init,
-        dtype: DType,
-        dev: &Device,
-    ) -> Result<Tensor>;
+    fn get(&self, s: Shape, name: &str, h: crate::Init, dtype: DType, dev: &Device) -> MTensor;
 
     fn contains_tensor(&self, name: &str) -> bool;
 }
 
 impl<'a> Backend for Box<dyn SimpleBackend + 'a> {
     type Hints = crate::Init;
-    fn get(
-        &self,
-        s: Shape,
-        name: &str,
-        h: Self::Hints,
-        dtype: DType,
-        dev: &Device,
-    ) -> Result<Tensor> {
+    fn get(&self, s: Shape, name: &str, h: Self::Hints, dtype: DType, dev: &Device) -> MTensor {
         self.as_ref().get(s, name, h, dtype, dev)
     }
 
@@ -172,17 +152,12 @@ impl<'a, B: Backend> VarBuilderArgs<'a, B> {
     }
 
     /// Retrieve the tensor associated with the given name at the current path.
-    pub fn get_with_hints<S: Into<Shape>>(
-        &self,
-        s: S,
-        name: &str,
-        hints: B::Hints,
-    ) -> Result<Tensor> {
+    pub fn get_with_hints<S: Into<Shape>>(&self, s: S, name: &str, hints: B::Hints) -> MTensor {
         self.get_with_hints_dtype(s, name, hints, self.data.dtype)
     }
 
     /// Retrieve the tensor associated with the given name at the current path.
-    pub fn get<S: Into<Shape>>(&self, s: S, name: &str) -> Result<Tensor> {
+    pub fn get<S: Into<Shape>>(&self, s: S, name: &str) -> MTensor {
         self.get_with_hints(s, name, Default::default())
     }
 
@@ -193,7 +168,7 @@ impl<'a, B: Backend> VarBuilderArgs<'a, B> {
         name: &str,
         hints: B::Hints,
         dtype: DType,
-    ) -> Result<Tensor> {
+    ) -> MTensor {
         let path = self.path(name);
         self.data
             .backend
@@ -204,7 +179,7 @@ impl<'a, B: Backend> VarBuilderArgs<'a, B> {
 struct Zeros;
 
 impl SimpleBackend for Zeros {
-    fn get(&self, s: Shape, _: &str, _: crate::Init, dtype: DType, dev: &Device) -> Result<Tensor> {
+    fn get(&self, s: Shape, _: &str, _: crate::Init, dtype: DType, dev: &Device) -> MTensor {
         Tensor::zeros(s, dtype, dev)
     }
 
@@ -214,14 +189,7 @@ impl SimpleBackend for Zeros {
 }
 
 impl SimpleBackend for HashMap<String, Tensor> {
-    fn get(
-        &self,
-        s: Shape,
-        name: &str,
-        _: crate::Init,
-        dtype: DType,
-        dev: &Device,
-    ) -> Result<Tensor> {
+    fn get(&self, s: Shape, name: &str, _: crate::Init, dtype: DType, dev: &Device) -> MTensor {
         let tensor = self
             .get(name)
             .ok_or_else(|| {
@@ -248,14 +216,7 @@ impl SimpleBackend for HashMap<String, Tensor> {
 }
 
 impl SimpleBackend for VarMap {
-    fn get(
-        &self,
-        s: Shape,
-        name: &str,
-        h: crate::Init,
-        dtype: DType,
-        dev: &Device,
-    ) -> Result<Tensor> {
+    fn get(&self, s: Shape, name: &str, h: crate::Init, dtype: DType, dev: &Device) -> MTensor {
         VarMap::get(self, s, name, h, dtype, dev)
     }
 
@@ -271,14 +232,7 @@ pub struct SafeTensorWithRouting<'a> {
 }
 
 impl<'a> SimpleBackend for SafeTensorWithRouting<'a> {
-    fn get(
-        &self,
-        s: Shape,
-        path: &str,
-        _: crate::Init,
-        dtype: DType,
-        dev: &Device,
-    ) -> Result<Tensor> {
+    fn get(&self, s: Shape, path: &str, _: crate::Init, dtype: DType, dev: &Device) -> MTensor {
         let index = self.routing.get(path).ok_or_else(|| {
             Error::CannotFindTensor {
                 path: path.to_string(),
@@ -286,7 +240,8 @@ impl<'a> SimpleBackend for SafeTensorWithRouting<'a> {
             .bt()
         })?;
         let tensor = self.safetensors[*index]
-            .tensor(path)?
+            .tensor(path)
+            .map_err(|e| e.into())?
             .load(dev)?
             .to_dtype(dtype)?;
         if tensor.shape() != &s {
@@ -297,7 +252,7 @@ impl<'a> SimpleBackend for SafeTensorWithRouting<'a> {
             }
             .bt())?
         }
-        Ok(tensor)
+        tensor.into()
     }
 
     fn contains_tensor(&self, name: &str) -> bool {
@@ -306,14 +261,7 @@ impl<'a> SimpleBackend for SafeTensorWithRouting<'a> {
 }
 
 impl SimpleBackend for candle::npy::NpzTensors {
-    fn get(
-        &self,
-        s: Shape,
-        path: &str,
-        _: crate::Init,
-        dtype: DType,
-        dev: &Device,
-    ) -> Result<Tensor> {
+    fn get(&self, s: Shape, path: &str, _: crate::Init, dtype: DType, dev: &Device) -> MTensor {
         let tensor = match self.get(path)? {
             None => Err(Error::CannotFindTensor {
                 path: path.to_string(),
@@ -330,7 +278,7 @@ impl SimpleBackend for candle::npy::NpzTensors {
             }
             .bt())?
         }
-        Ok(tensor)
+        tensor.into()
     }
 
     fn contains_tensor(&self, name: &str) -> bool {
@@ -339,14 +287,7 @@ impl SimpleBackend for candle::npy::NpzTensors {
 }
 
 impl SimpleBackend for candle::pickle::PthTensors {
-    fn get(
-        &self,
-        s: Shape,
-        path: &str,
-        _: crate::Init,
-        dtype: DType,
-        dev: &Device,
-    ) -> Result<Tensor> {
+    fn get(&self, s: Shape, path: &str, _: crate::Init, dtype: DType, dev: &Device) -> MTensor {
         let tensor = match self.get(path)? {
             None => Err(Error::CannotFindTensor {
                 path: path.to_string(),
@@ -363,7 +304,7 @@ impl SimpleBackend for candle::pickle::PthTensors {
             }
             .bt())?
         }
-        Ok(tensor)
+        tensor.into()
     }
 
     fn contains_tensor(&self, name: &str) -> bool {
@@ -372,14 +313,7 @@ impl SimpleBackend for candle::pickle::PthTensors {
 }
 
 impl SimpleBackend for candle::safetensors::MmapedSafetensors {
-    fn get(
-        &self,
-        s: Shape,
-        name: &str,
-        _: crate::Init,
-        dtype: DType,
-        dev: &Device,
-    ) -> Result<Tensor> {
+    fn get(&self, s: Shape, name: &str, _: crate::Init, dtype: DType, dev: &Device) -> MTensor {
         let tensor = self.load(name, dev)?.to_dtype(dtype)?;
         if tensor.shape() != &s {
             Err(candle::Error::UnexpectedShape {
@@ -389,7 +323,7 @@ impl SimpleBackend for candle::safetensors::MmapedSafetensors {
             }
             .bt())?
         }
-        Ok(tensor)
+        tensor.into()
     }
 
     fn contains_tensor(&self, name: &str) -> bool {
@@ -398,14 +332,7 @@ impl SimpleBackend for candle::safetensors::MmapedSafetensors {
 }
 
 impl SimpleBackend for candle::safetensors::BufferedSafetensors {
-    fn get(
-        &self,
-        s: Shape,
-        name: &str,
-        _: crate::Init,
-        dtype: DType,
-        dev: &Device,
-    ) -> Result<Tensor> {
+    fn get(&self, s: Shape, name: &str, _: crate::Init, dtype: DType, dev: &Device) -> MTensor {
         let tensor = self.load(name, dev)?.to_dtype(dtype)?;
         if tensor.shape() != &s {
             Err(candle::Error::UnexpectedShape {
@@ -415,7 +342,7 @@ impl SimpleBackend for candle::safetensors::BufferedSafetensors {
             }
             .bt())?
         }
-        Ok(tensor)
+        tensor.into()
     }
 
     fn contains_tensor(&self, name: &str) -> bool {
@@ -424,14 +351,7 @@ impl SimpleBackend for candle::safetensors::BufferedSafetensors {
 }
 
 impl<'a> SimpleBackend for candle::safetensors::SliceSafetensors<'a> {
-    fn get(
-        &self,
-        s: Shape,
-        name: &str,
-        _: crate::Init,
-        dtype: DType,
-        dev: &Device,
-    ) -> Result<Tensor> {
+    fn get(&self, s: Shape, name: &str, _: crate::Init, dtype: DType, dev: &Device) -> MTensor {
         let tensor = self.load(name, dev)?.to_dtype(dtype)?;
         if tensor.shape() != &s {
             Err(candle::Error::UnexpectedShape {
@@ -441,7 +361,7 @@ impl<'a> SimpleBackend for candle::safetensors::SliceSafetensors<'a> {
             }
             .bt())?
         }
-        Ok(tensor)
+        tensor.into()
     }
 
     fn contains_tensor(&self, name: &str) -> bool {
@@ -640,7 +560,7 @@ impl Backend for ShardedSafeTensors {
         h: Self::Hints,
         dtype: DType,
         dev: &Device,
-    ) -> Result<Tensor> {
+    ) -> MTensor {
         if h.world_size == 1 {
             // There is no sharding to be applied here so we use the default backend to speed
             // things up.
@@ -662,7 +582,8 @@ impl Backend for ShardedSafeTensors {
                 shape: shape.into(),
                 dim,
                 n_parts: world_size,
-            });
+            })
+            .into();
         }
         let block_size = size / world_size;
         let start = rank * block_size;
@@ -713,14 +634,7 @@ pub struct Rename<'a, R: Renamer> {
 }
 
 impl<'a, R: Renamer + Sync + Send> SimpleBackend for Rename<'a, R> {
-    fn get(
-        &self,
-        s: Shape,
-        name: &str,
-        h: crate::Init,
-        dtype: DType,
-        dev: &Device,
-    ) -> Result<Tensor> {
+    fn get(&self, s: Shape, name: &str, h: crate::Init, dtype: DType, dev: &Device) -> MTensor {
         let name = self.renamer.rename(name);
         self.inner
             .get_with_hints_dtype(s, &name, h, dtype)?

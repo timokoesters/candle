@@ -1,5 +1,5 @@
 //! Recurrent Neural Networks
-use candle::{DType, Device, IndexOp, Result, Tensor};
+use candle::{DType, Device, IndexOp, MTensor, Result, Tensor};
 
 /// Trait for Recurrent Neural Networks.
 #[allow(clippy::upper_case_acronyms)]
@@ -43,7 +43,7 @@ pub trait RNN {
     }
 
     /// Converts a sequence of state to a tensor.
-    fn states_to_tensor(&self, states: &[Self::State]) -> Result<Tensor>;
+    fn states_to_tensor(&self, states: &[Self::State]) -> MTensor;
 }
 
 /// The state for a LSTM network, this contains two tensors.
@@ -199,7 +199,7 @@ impl RNN for LSTM {
         })
     }
 
-    fn states_to_tensor(&self, states: &[Self::State]) -> Result<Tensor> {
+    fn states_to_tensor(&self, states: &[Self::State]) -> MTensor {
         let states = states.iter().map(|s| s.h.clone()).collect::<Vec<_>>();
         Tensor::stack(&states, 1)
     }
@@ -333,7 +333,7 @@ impl RNN for GRU {
         Ok(GRUState { h: next_h })
     }
 
-    fn states_to_tensor(&self, states: &[Self::State]) -> Result<Tensor> {
+    fn states_to_tensor(&self, states: &[Self::State]) -> MTensor {
         let states = states.iter().map(|s| s.h.clone()).collect::<Vec<_>>();
         Tensor::cat(&states, 1)
     }

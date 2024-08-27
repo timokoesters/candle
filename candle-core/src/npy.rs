@@ -207,37 +207,37 @@ impl Tensor {
             DType::BF16 => {
                 let mut data_t = vec![bf16::ZERO; elem_count];
                 reader.read_u16_into::<LittleEndian>(data_t.reinterpret_cast_mut())?;
-                Tensor::from_vec(data_t, shape, &Device::Cpu)
+                Tensor::from_vec(data_t, shape, &Device::Cpu).inner
             }
             DType::F16 => {
                 let mut data_t = vec![f16::ZERO; elem_count];
                 reader.read_u16_into::<LittleEndian>(data_t.reinterpret_cast_mut())?;
-                Tensor::from_vec(data_t, shape, &Device::Cpu)
+                Tensor::from_vec(data_t, shape, &Device::Cpu).inner
             }
             DType::F32 => {
                 let mut data_t = vec![0f32; elem_count];
                 reader.read_f32_into::<LittleEndian>(&mut data_t)?;
-                Tensor::from_vec(data_t, shape, &Device::Cpu)
+                Tensor::from_vec(data_t, shape, &Device::Cpu).inner
             }
             DType::F64 => {
                 let mut data_t = vec![0f64; elem_count];
                 reader.read_f64_into::<LittleEndian>(&mut data_t)?;
-                Tensor::from_vec(data_t, shape, &Device::Cpu)
+                Tensor::from_vec(data_t, shape, &Device::Cpu).inner
             }
             DType::U8 => {
                 let mut data_t = vec![0u8; elem_count];
                 reader.read_exact(&mut data_t)?;
-                Tensor::from_vec(data_t, shape, &Device::Cpu)
+                Tensor::from_vec(data_t, shape, &Device::Cpu).inner
             }
             DType::U32 => {
                 let mut data_t = vec![0u32; elem_count];
                 reader.read_u32_into::<LittleEndian>(&mut data_t)?;
-                Tensor::from_vec(data_t, shape, &Device::Cpu)
+                Tensor::from_vec(data_t, shape, &Device::Cpu).inner
             }
             DType::I64 => {
                 let mut data_t = vec![0i64; elem_count];
                 reader.read_i64_into::<LittleEndian>(&mut data_t)?;
-                Tensor::from_vec(data_t, shape, &Device::Cpu)
+                Tensor::from_vec(data_t, shape, &Device::Cpu).inner
             }
         }
     }

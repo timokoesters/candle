@@ -3,7 +3,7 @@ use candle_core::{
     quantized::{self, GgmlDType},
     test_device,
     test_utils::to_vec2_round,
-    DType, Device, IndexOp, Module, Result, Tensor,
+    DType, Device, IndexOp, MTensor, Module, Result, Tensor,
 };
 use quantized::{k_quants, GgmlType};
 use rand::prelude::*;
@@ -350,7 +350,7 @@ fn quantize_q5_1(device: &Device) -> Result<()> {
     Ok(())
 }
 
-fn get_test_vector2(bound: f32, size: usize, device: &Device) -> Result<Tensor> {
+fn get_test_vector2(bound: f32, size: usize, device: &Device) -> MTensor {
     assert!(
         size % crate::quantized::k_quants::QK_K == 0,
         "size must be a multiple of {}",

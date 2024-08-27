@@ -1,4 +1,4 @@
-use candle::{DType, IndexOp, Result, Tensor, D};
+use candle::{DType, IndexOp, MTensor, Result, Tensor, D};
 use candle_nn::{
     batch_norm, conv2d, conv2d_no_bias, BatchNorm, Conv2d, Conv2dConfig, Module, VarBuilder,
 };
@@ -71,7 +71,7 @@ impl Upsample {
 }
 
 impl Module for Upsample {
-    fn forward(&self, xs: &Tensor) -> candle::Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let (_b_size, _channels, h, w) = xs.dims4()?;
         xs.upsample_nearest2d(self.scale_factor * h, self.scale_factor * w)
     }
@@ -106,7 +106,7 @@ impl ConvBlock {
 }
 
 impl Module for ConvBlock {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let xs = self.conv.forward(xs)?.apply_t(&self.bn, false)?;
         candle_nn::ops::silu(&xs)
     }
@@ -131,12 +131,12 @@ impl Bottleneck {
 }
 
 impl Module for Bottleneck {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let ys = self.cv2.forward(&self.cv1.forward(xs)?)?;
         if self.residual {
             xs + ys
         } else {
-            Ok(ys)
+            ys.into()
         }
     }
 }
@@ -167,7 +167,7 @@ impl C2f {
 }
 
 impl Module for C2f {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let ys = self.cv1.forward(xs)?;
         let mut ys = ys.chunk(2, 1)?;
         for m in self.bottleneck.iter() {
@@ -195,7 +195,7 @@ impl Sppf {
 }
 
 impl Module for Sppf {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let (_, _, _, _) = xs.dims4()?;
         let xs = self.cv1.forward(xs)?;
         let xs2 = xs
@@ -228,7 +228,7 @@ impl Dfl {
 }
 
 impl Module for Dfl {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let (b_sz, _channels, anchors) = xs.dims3()?;
         let xs = xs
             .reshape((b_sz, 4, self.num_classes, anchors))?
@@ -489,7 +489,7 @@ struct DetectionHeadOut {
     strides: Tensor,
 }
 
-fn dist2bbox(distance: &Tensor, anchor_points: &Tensor) -> Result<Tensor> {
+fn dist2bbox(distance: &Tensor, anchor_points: &Tensor) -> MTensor {
     let chunks = distance.chunk(2, 1)?;
     let lt = &chunks[0];
     let rb = &chunks[1];
@@ -625,7 +625,7 @@ impl PoseHead {
         Ok((block0, block1, conv))
     }
 
-    fn forward(&self, xs0: &Tensor, xs1: &Tensor, xs2: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs0: &Tensor, xs1: &Tensor, xs2: &Tensor) -> MTensor {
         let d = self.detect.forward(xs0, xs1, xs2)?;
         let forward_cv = |xs: &Tensor, i: usize| {
             let (b_sz, _, h, w) = xs.dims4()?;
@@ -666,10 +666,10 @@ impl YoloV8 {
 }
 
 impl Module for YoloV8 {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let (xs1, xs2, xs3) = self.net.forward(xs)?;
         let (xs1, xs2, xs3) = self.fpn.forward(&xs1, &xs2, &xs3)?;
-        Ok(self.head.forward(&xs1, &xs2, &xs3)?.pred)
+        self.head.forward(&xs1, &xs2, &xs3)?.pred.into()
     }
 }
 
@@ -695,7 +695,7 @@ impl YoloV8Pose {
 }
 
 impl Module for YoloV8Pose {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let (xs1, xs2, xs3) = self.net.forward(xs)?;
         let (xs1, xs2, xs3) = self.fpn.forward(&xs1, &xs2, &xs3)?;
         self.head.forward(&xs1, &xs2, &xs3)

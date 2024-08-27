@@ -1,3 +1,4 @@
+use crate::mtensor::MTensor;
 /// Methods for backpropagation of gradients.
 use crate::op::{BinaryOp, Op, ReduceOp, UnaryOp};
 use crate::{Error, Result, Tensor, TensorId};
@@ -5,7 +6,7 @@ use std::collections::HashMap;
 
 // arg has been reduced to node via reduce_dims, expand it back to arg.
 // This has to handle keepdims.
-fn broadcast_back(arg: &Tensor, node: &Tensor, reduced_dims: &[usize]) -> Result<Tensor> {
+fn broadcast_back(arg: &Tensor, node: &Tensor, reduced_dims: &[usize]) -> MTensor {
     if arg.rank() == node.rank() {
         // keepdim = true
         node.broadcast_as(arg.shape())

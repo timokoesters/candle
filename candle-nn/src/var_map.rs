@@ -1,4 +1,4 @@
-use candle::{DType, Device, Result, Shape, Tensor, Var};
+use candle::{DType, Device, MTensor, Result, Shape, Tensor, Var};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -97,7 +97,7 @@ impl VarMap {
         init: crate::Init,
         dtype: DType,
         device: &Device,
-    ) -> Result<Tensor> {
+    ) -> MTensor {
         let shape = shape.into();
         let mut tensor_data = self.data.lock().unwrap();
         if let Some(tensor) = tensor_data.get(path) {
@@ -105,12 +105,12 @@ impl VarMap {
             if &shape != tensor_shape {
                 candle::bail!("shape mismatch on {path}: {shape:?} <> {tensor_shape:?}")
             }
-            return Ok(tensor.as_tensor().clone());
+            return tensor.as_tensor().clone().into();
         }
         let var = init.var(shape, dtype, device)?;
         let tensor = var.as_tensor().clone();
         tensor_data.insert(path.to_string(), var);
-        Ok(tensor)
+        tensor.into()
     }
 
     pub fn data(&self) -> &Mutex<HashMap<String, Var>> {

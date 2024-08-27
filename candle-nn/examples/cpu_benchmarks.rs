@@ -114,7 +114,7 @@ impl Benchmark for Conv1d {
     }
 
     fn run_one(d: &Self::PreProcessData) -> Result<Self::RunResult> {
-        d.0.conv1d(&d.1, 0, 1, 1, 1)
+        d.0.conv1d(&d.1, 0, 1, 1, 1).inner
     }
 
     const ITERS: usize = 5;
@@ -133,7 +133,7 @@ impl Benchmark for Conv2d {
     }
 
     fn run_one(d: &Self::PreProcessData) -> Result<Self::RunResult> {
-        d.0.conv2d(&d.1, 0, 1, 1, 1)
+        d.0.conv2d(&d.1, 0, 1, 1, 1).inner
     }
 
     const ITERS: usize = 5;
@@ -191,7 +191,7 @@ impl Benchmark for MatMul {
     }
 
     fn run_one(d: &Self::PreProcessData) -> Result<Self::RunResult> {
-        d.0.matmul(&d.1)
+        d.0.matmul(&d.1).inner
     }
 
     const ITERS: usize = 100;
@@ -208,7 +208,7 @@ impl Benchmark for MatVec {
     }
 
     fn run_one(d: &Self::PreProcessData) -> Result<Self::RunResult> {
-        d.0.matmul(&d.1)
+        d.0.matmul(&d.1).inner
     }
 
     const ITERS: usize = 100;
@@ -232,7 +232,7 @@ impl Benchmark for QMatMul {
     }
 
     fn run_one(d: &Self::PreProcessData) -> Result<Self::RunResult> {
-        d.0.forward(&d.1)
+        d.0.forward(&d.1).inner
     }
 
     const ITERS: usize = 100;
@@ -249,7 +249,7 @@ impl Benchmark for Cat {
     }
 
     fn run_one(d: &Self::PreProcessData) -> Result<Self::RunResult> {
-        Tensor::cat(&[&d.0, &d.1], 2)
+        Tensor::cat(&[&d.0, &d.1], 2).inner
     }
 
     const ITERS: usize = 1000;
@@ -266,7 +266,7 @@ impl Benchmark for Softmax {
     }
 
     fn run_one(d: &Self::PreProcessData) -> Result<Self::RunResult> {
-        candle_nn::ops::softmax(d, D::Minus1)
+        candle_nn::ops::softmax(d, D::Minus1).inner
     }
 
     const ITERS: usize = 100;
@@ -283,7 +283,7 @@ impl Benchmark for SoftmaxLastDim {
     }
 
     fn run_one(d: &Self::PreProcessData) -> Result<Self::RunResult> {
-        candle_nn::ops::softmax_last_dim(d)
+        candle_nn::ops::softmax_last_dim(d).inner
     }
 
     const ITERS: usize = 100;

@@ -1,4 +1,4 @@
-use candle::{Module, Result, Tensor};
+use candle::{MTensor, Module, Result, Tensor};
 use candle_nn::VarBuilder;
 
 #[derive(Debug, Clone)]
@@ -27,7 +27,7 @@ impl Embedding {
 }
 
 impl Module for Embedding {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let _enter = self.span.enter();
         self.inner.forward(xs)
     }
@@ -66,7 +66,7 @@ pub fn linear_no_bias(d1: usize, d2: usize, vb: VarBuilder) -> Result<Linear> {
 }
 
 impl Module for Linear {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let _enter = self.span.enter();
         self.inner.forward(xs)
     }
@@ -80,7 +80,7 @@ pub struct Conv2d {
 }
 
 impl Module for Conv2d {
-    fn forward(&self, x: &Tensor) -> Result<Tensor> {
+    fn forward(&self, x: &Tensor) -> MTensor {
         let _enter = self.span.enter();
         self.inner.forward(x)
     }
@@ -125,7 +125,7 @@ impl QMatMul {
 }
 
 impl Module for QMatMul {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let _enter = self.span.enter();
         self.inner.forward(xs)
     }
@@ -152,7 +152,7 @@ impl LayerNorm {
 }
 
 impl Module for LayerNorm {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let _enter = self.span.enter();
         self.inner.forward(xs)
     }
@@ -181,14 +181,14 @@ impl RmsNorm {
         Ok(Self { inner, span })
     }
 
-    pub fn forward_diff(&self, x: &Tensor) -> Result<Tensor> {
+    pub fn forward_diff(&self, x: &Tensor) -> MTensor {
         let _enter = self.span.enter();
         self.inner.forward_diff(x)
     }
 }
 
 impl Module for RmsNorm {
-    fn forward(&self, x: &Tensor) -> Result<Tensor> {
+    fn forward(&self, x: &Tensor) -> MTensor {
         let _enter = self.span.enter();
         self.inner.forward(x)
     }

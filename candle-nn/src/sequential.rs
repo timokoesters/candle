@@ -1,5 +1,5 @@
 //! A sequential layer used to chain multiple layers and closures.
-use candle::{Module, Result, Tensor};
+use candle::{MTensor, Module, Result, Tensor};
 
 /// A sequential layer combining multiple other layers.
 pub struct Sequential {
@@ -24,12 +24,12 @@ impl Sequential {
 }
 
 impl Module for Sequential {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> MTensor {
         let mut xs = xs.clone();
         for layer in self.layers.iter() {
             xs = layer.forward(&xs)?
         }
-        Ok(xs)
+        xs.into()
     }
 }
 
@@ -44,7 +44,7 @@ impl Sequential {
     /// Appends a closure after all the current layers.
     pub fn add_fn<F>(self, f: F) -> Self
     where
-        F: 'static + Fn(&Tensor) -> Result<Tensor> + Send + Sync,
+        F: 'static + Fn(&Tensor) -> MTensor + Send + Sync,
     {
         self.add(super::func(f))
     }
